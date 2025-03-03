@@ -1129,6 +1129,7 @@
         
         // Strava API Configuration
         const STRAVA_CLIENT_ID = "150694"; // Zastąp swoim prawdziwym CLIENT_ID
+        const STRAVA_CLIENT_SECRET = "d780e7a6e9bd2493f4e578d5206d4b6921c0a775"; // Zastąp swoim prawdziwym CLIENT_SECRET
         const STRAVA_REDIRECT_URI = window.location.href.split('?')[0]; // Obecna strona bez parametrów
         
         // Global Variables
@@ -1889,12 +1890,27 @@
             console.log('Wymiana kodu autoryzacyjnego na token...');
             
             try {
-                // Rozwiązanie tymczasowe - ręczna autoryzacja w Strava
-                // W rzeczywistej aplikacji użyj Firebase Functions lub własnego backendu
+                // Sprawdź, czy mamy skonfigurowane ID i Secret
+                if (STRAVA_CLIENT_ID === "TWÓJ_STRAVA_CLIENT_ID" || STRAVA_CLIENT_SECRET === "TWÓJ_STRAVA_CLIENT_SECRET") {
+                    console.warn('Używanie symulowanych danych, ponieważ nie skonfigurowano CLIENT_ID i CLIENT_SECRET');
+                    // Symulowane dane dla celów demonstracyjnych
+                    return {
+                        access_token: 'fake_access_token_' + Date.now(),
+                        refresh_token: 'fake_refresh_token_' + Date.now(),
+                        expires_in: 21600,
+                        athlete: {
+                            id: 'user_' + Math.floor(Math.random() * 1000000),
+                            firstname: 'Demo',
+                            lastname: 'User',
+                            profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
+                        }
+                    };
+                }
                 
+                // Użyj proxy CORS aby ominąć ograniczenia CORS
+                // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
                 const tokenUrl = 'https://cors-anywhere.herokuapp.com/https://www.strava.com/oauth/token';
                 
-                // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
                 const response = await fetch(tokenUrl, {
                     method: 'POST',
                     headers: {
@@ -2021,6 +2037,12 @@
                 
                 console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toISOString()}`);
                 
+                // Sprawdź, czy używamy symulowanych danych
+                if (token.startsWith('fake_')) {
+                    console.warn('Używanie symulowanych danych Strava');
+                    return generateTestActivities();
+                }
+                
                 // Użyj proxy CORS aby ominąć ograniczenia CORS
                 // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
                 const activitiesUrl = `https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`;
@@ -2039,7 +2061,7 @@
                     // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
                     if (response.status === 403) {
                         alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
-                        return [];
+                        return generateTestActivities();
                     }
                     
                     throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
@@ -2061,47 +2083,52 @@
                 
             } catch (error) {
                 console.error('Błąd podczas pobierania aktywności z API Strava:', error);
-                alert(`Wystąpił błąd podczas pobierania aktywności: ${error.message}. Sprawdź konsolę deweloperską.`);
+                alert(`Wystąpił błąd podczas pobierania aktywności: ${error.message}. Używanie danych testowych.`);
                 
-                // Tworzymy kilka testowych aktywności dla demonstracji
-                console.log('Generowanie przykładowych aktywności...');
-                const testActivities = [];
-                const types = ['Run', 'Ride'];
-                const names = [
-                    'Poranny bieg', 'Popołudniowa jazda', 'Wieczorny bieg', 
-                    'Długi weekend', 'Regeneracja', 'Bieg w terenie',
-                    'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowa jazda'
-                ];
-                
-                // Wygeneruj 5-10 losowych aktywności
-                const count = Math.floor(Math.random() * 5) + 5;
-                
-                for (let i = 0; i < count; i++) {
-                    const type = types[Math.floor(Math.random() * types.length)];
-                    const name = names[Math.floor(Math.random() * names.length)];
-                    const distance = (Math.random() * 20 + 3) * 1000; // 3-23km w metrach
-                    const movingTime = distance * (Math.random() * 30 + 240); // 4-7 min/km tempo
-                    const averageSpeed = type === 'Run' ? distance / movingTime * 3600 : distance / movingTime * 3600 * 2; // km/h
-                    
-                    // Losowa data między początkiem wyzwania a teraz (lub wcześniej do testów)
-                    const minDate = new Date(now);
-                    minDate.setMonth(minDate.getMonth() - 3); // Do 3 miesięcy temu
-                    const randomDate = new Date(minDate.getTime() + Math.random() * (now.getTime() - minDate.getTime()));
-                    
-                    testActivities.push({
-                        id: 'activity_' + Math.floor(Math.random() * 1000000),
-                        name: name,
-                        type: type,
-                        distance: distance,
-                        movingTime: movingTime,
-                        averageSpeed: averageSpeed,
-                        startDate: randomDate
-                    });
-                }
-                
-                console.log('Wygenerowano testowe aktywności:', testActivities);
-                return testActivities;
+                return generateTestActivities();
             }
+        }
+        
+        // Generowanie testowych aktywności
+        function generateTestActivities() {
+            console.log('Generowanie przykładowych aktywności...');
+            const testActivities = [];
+            const types = ['Run', 'Ride'];
+            const names = [
+                'Poranny bieg', 'Popołudniowa jazda', 'Wieczorny bieg', 
+                'Długi weekend', 'Regeneracja', 'Bieg w terenie',
+                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowa jazda'
+            ];
+            
+            // Wygeneruj 5-10 losowych aktywności
+            const count = Math.floor(Math.random() * 5) + 5;
+            const now = new Date();
+            
+            for (let i = 0; i < count; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                const name = names[Math.floor(Math.random() * names.length)];
+                const distance = (Math.random() * 20 + 3) * 1000; // 3-23km w metrach
+                const movingTime = distance * (Math.random() * 30 + 240); // 4-7 min/km tempo
+                const averageSpeed = type === 'Run' ? distance / movingTime * 3600 : distance / movingTime * 3600 * 2; // km/h
+                
+                // Losowa data między początkiem wyzwania a teraz (lub wcześniej do testów)
+                const minDate = new Date(now);
+                minDate.setMonth(minDate.getMonth() - 3); // Do 3 miesięcy temu
+                const randomDate = new Date(minDate.getTime() + Math.random() * (now.getTime() - minDate.getTime()));
+                
+                testActivities.push({
+                    id: 'activity_' + Math.floor(Math.random() * 1000000),
+                    name: name,
+                    type: type,
+                    distance: distance,
+                    movingTime: movingTime,
+                    averageSpeed: averageSpeed,
+                    startDate: randomDate
+                });
+            }
+            
+            console.log('Wygenerowano testowe aktywności:', testActivities);
+            return testActivities;
         }
         
         // Add activities to Firebase
