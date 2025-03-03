@@ -1196,7 +1196,7 @@
 
         <!-- Admin Panel Link -->
         <p style="text-align: center; margin-top: 20px;">
-            <a href="#" id="admin-link">Panel administratora</a>
+            <a href="#" id="admin-link" style="cursor: pointer;">Panel administratora</a>
         </p>
     </main>
 
@@ -1418,7 +1418,9 @@
             
             // Zastąp link do manifestu
             const manifestLink = document.querySelector('link[rel="manifest"]');
-            manifestLink.href = manifestURL;
+            if (manifestLink) {
+                manifestLink.href = manifestURL;
+            }
 
             // Utwórz podstawową ikonę SVG
             const svgContent = `
@@ -1435,8 +1437,8 @@
             const iconLink = document.querySelector('link[rel="icon"]');
             const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]');
             
-            iconLink.href = svgURL;
-            appleIconLink.href = svgURL;
+            if (iconLink) iconLink.href = svgURL;
+            if (appleIconLink) appleIconLink.href = svgURL;
         }
 
         // Debugging tools
@@ -1447,23 +1449,27 @@
         // Enable debug mode with 3 taps on the header
         let tapCount = 0;
         const header = document.querySelector('header');
-        header.addEventListener('click', () => {
-            tapCount++;
-            if (tapCount >= 3) {
+        if (header) {
+            header.addEventListener('click', () => {
+                tapCount++;
+                if (tapCount >= 3) {
+                    debugEnabled = !debugEnabled;
+                    debugElement.style.display = debugEnabled ? 'block' : 'none';
+                    debugToggle.style.display = debugEnabled ? 'block' : 'none';
+                    debug('Debug mode ' + (debugEnabled ? 'activated' : 'deactivated'));
+                    tapCount = 0;
+                }
+                setTimeout(() => { tapCount = 0; }, 500);
+            });
+        }
+
+        if (debugToggle) {
+            debugToggle.addEventListener('click', () => {
                 debugEnabled = !debugEnabled;
                 debugElement.style.display = debugEnabled ? 'block' : 'none';
-                debugToggle.style.display = debugEnabled ? 'block' : 'none';
                 debug('Debug mode ' + (debugEnabled ? 'activated' : 'deactivated'));
-                tapCount = 0;
-            }
-            setTimeout(() => { tapCount = 0; }, 500);
-        });
-
-        debugToggle.addEventListener('click', () => {
-            debugEnabled = !debugEnabled;
-            debugElement.style.display = debugEnabled ? 'block' : 'none';
-            debug('Debug mode ' + (debugEnabled ? 'activated' : 'deactivated'));
-        });
+            });
+        }
 
         function debug(message, obj = null) {
             if (debugEnabled) {
@@ -1480,23 +1486,25 @@
                 
                 console.log(logMessage);
                 
-                const pre = document.createElement('pre');
-                pre.textContent = logMessage;
-                debugElement.appendChild(pre);
-                debugElement.scrollTop = debugElement.scrollHeight;
+                if (debugElement) {
+                    const pre = document.createElement('pre');
+                    pre.textContent = logMessage;
+                    debugElement.appendChild(pre);
+                    debugElement.scrollTop = debugElement.scrollHeight;
+                }
             }
         }
 
         // Konfiguracja Firebase
         const firebaseConfig = {
-  apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
-  authDomain: "wyzwanie2025-a6298.firebaseapp.com",
-  projectId: "wyzwanie2025-a6298",
-  storageBucket: "wyzwanie2025-a6298.firebasestorage.app",
-  messagingSenderId: "74567179841",
-  appId: "1:74567179841:web:e7bb1c6f12fc64ef5730c0",
-  measurementId: "G-D63RBL1K8E"
-};
+            apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
+            authDomain: "wyzwanie2025-a6298.firebaseapp.com",
+            projectId: "wyzwanie2025-a6298",
+            storageBucket: "wyzwanie2025-a6298.firebasestorage.app",
+            messagingSenderId: "74567179841",
+            appId: "1:74567179841:web:e7bb1c6f12fc64ef5730c0",
+            measurementId: "G-D63RBL1K8E"
+        };
 
         // Lokalne dane zastępcze gdy Firebase nie jest dostępny
         let localFirestore = {
@@ -1519,20 +1527,25 @@
                 // Try to initialize Firebase
                 try {
                     debug('Initializing Firebase');
-                    firebase.initializeApp(firebaseConfig);
-                    this.db = firebase.firestore();
-                    this.auth = firebase.auth();
-                    this.useLocalFallback = false;
-                    debug('Firebase initialized successfully');
-                    
-                    // Enable offline persistence if Firebase is working
-                    this.db.enablePersistence()
-                        .then(() => {
-                            debug('Firebase offline persistence enabled');
-                        })
-                        .catch(err => {
-                            debug('Firebase persistence error:', err);
-                        });
+                    if (typeof firebase !== 'undefined') {
+                        firebase.initializeApp(firebaseConfig);
+                        this.db = firebase.firestore();
+                        this.auth = firebase.auth();
+                        this.useLocalFallback = false;
+                        debug('Firebase initialized successfully');
+                        
+                        // Enable offline persistence if Firebase is working
+                        this.db.enablePersistence()
+                            .then(() => {
+                                debug('Firebase offline persistence enabled');
+                            })
+                            .catch(err => {
+                                debug('Firebase persistence error:', err);
+                            });
+                    } else {
+                        debug('Firebase SDK not available');
+                        this.showNotification("Tryb lokalny", "Firebase SDK nie jest dostępny. Dane będą przechowywane lokalnie.", "warning");
+                    }
                 } catch (error) {
                     debug('Firebase initialization error - using local fallback:', error);
                     this.showNotification("Tryb lokalny", "Firebase nie jest skonfigurowany lub niedostępny. Dane będą przechowywane lokalnie.", "warning");
@@ -1898,9 +1911,13 @@
             // Pass-through to app's notification system
             showNotification(title, message, type) {
                 const notification = document.getElementById('notification');
+                if (!notification) return;
+                
                 const notificationTitle = notification.querySelector('.notification-title');
                 const notificationText = document.getElementById('notification-text');
                 const notificationIcon = notification.querySelector('.notification-icon i');
+                
+                if (!notificationTitle || !notificationText || !notificationIcon) return;
                 
                 // Set content
                 notificationTitle.textContent = title;
@@ -1973,11 +1990,11 @@
                 // Load stored settings and challenge dates
                 await this.loadStoredSettings();
                 
-                // Load data
-                await this.loadData();
-                
                 // Initialize event listeners
                 this.initEventListeners();
+                
+                // Load data
+                await this.loadData();
                 
                 // Initialize service worker
                 this.initServiceWorker();
@@ -2046,9 +2063,13 @@
                     }
                     
                     // Update UI with loaded settings
-                    document.getElementById('challenge-start').value = this.formatDateForInput(this.state.challengeStartDate);
-                    document.getElementById('challenge-end').value = this.formatDateForInput(this.state.challengeEndDate);
-                    document.getElementById('test-mode').value = this.state.testMode ? '1' : '0';
+                    const startDateInput = document.getElementById('challenge-start');
+                    const endDateInput = document.getElementById('challenge-end');
+                    const testModeSelect = document.getElementById('test-mode');
+                    
+                    if (startDateInput) startDateInput.value = this.formatDateForInput(this.state.challengeStartDate);
+                    if (endDateInput) endDateInput.value = this.formatDateForInput(this.state.challengeEndDate);
+                    if (testModeSelect) testModeSelect.value = this.state.testMode ? '1' : '0';
                 } else {
                     debug("No settings found, using defaults");
                     // No settings in Firebase, use default values
@@ -2064,7 +2085,11 @@
                 const stravaTokens = localStorage.getItem('wyzwanie2025_stravaTokens');
                 if (stravaTokens) {
                     debug("Found Strava tokens in localStorage");
-                    this.state.tokens = JSON.parse(stravaTokens);
+                    try {
+                        this.state.tokens = JSON.parse(stravaTokens);
+                    } catch (e) {
+                        debug("Error parsing Strava tokens:", e);
+                    }
                 }
                 
                 debug("Settings loaded");
@@ -2072,66 +2097,80 @@
 
             initChart() {
                 debug("Initializing chart");
-                const ctx = document.getElementById('progress-chart').getContext('2d');
+                const chartCanvas = document.getElementById('progress-chart');
+                if (!chartCanvas) {
+                    debug("Chart canvas not found");
+                    return;
+                }
+                
+                const ctx = chartCanvas.getContext('2d');
+                if (!ctx) {
+                    debug("Failed to get chart context");
+                    return;
+                }
                 
                 // Create empty chart (will be populated later)
-                this.progressChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: [],
-                        datasets: []
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false,
+                try {
+                    this.progressChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: []
                         },
-                        plugins: {
-                            tooltip: {
-                                backgroundColor: 'rgba(0, 93, 172, 0.8)',
-                                titleFont: {
-                                    weight: 'bold'
-                                },
-                                callbacks: {
-                                    title: function(context) {
-                                        return context[0].label;
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            plugins: {
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 93, 172, 0.8)',
+                                    titleFont: {
+                                        weight: 'bold'
                                     },
-                                    label: function(context) {
-                                        return `${context.dataset.label}: ${context.parsed.y} punktów`;
+                                    callbacks: {
+                                        title: function(context) {
+                                            return context[0].label;
+                                        },
+                                        label: function(context) {
+                                            return `${context.dataset.label}: ${context.parsed.y} punktów`;
+                                        }
+                                    }
+                                },
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        boxWidth: 12,
+                                        padding: 15
                                     }
                                 }
                             },
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    boxWidth: 12,
-                                    padding: 15
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.05)'
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.05)'
+                            scales: {
+                                x: {
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)'
+                                    }
                                 },
-                                ticks: {
-                                    callback: function(value) {
-                                        return value + ' pkt';
+                                y: {
+                                    beginAtZero: true,
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)'
+                                    },
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value + ' pkt';
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                });
-                debug("Chart initialized");
+                    });
+                    debug("Chart initialized");
+                } catch (e) {
+                    debug("Error initializing chart:", e);
+                }
             }
 
             async loadData() {
@@ -2164,8 +2203,12 @@
                 const storedUser = localStorage.getItem('wyzwanie2025_user');
                 if (storedUser) {
                     debug("Found stored user data");
-                    this.state.user = JSON.parse(storedUser);
-                    this.updateJoinButton();
+                    try {
+                        this.state.user = JSON.parse(storedUser);
+                        this.updateJoinButton();
+                    } catch (e) {
+                        debug("Error parsing stored user:", e);
+                    }
                 }
 
                 // Load participants and activities from Firebase
@@ -2258,9 +2301,13 @@
                     }
                     
                     // Update UI
-                    document.getElementById('challenge-start').value = this.formatDateForInput(this.state.challengeStartDate);
-                    document.getElementById('challenge-end').value = this.formatDateForInput(this.state.challengeEndDate);
-                    document.getElementById('test-mode').value = this.state.testMode ? '1' : '0';
+                    const startDateInput = document.getElementById('challenge-start');
+                    const endDateInput = document.getElementById('challenge-end');
+                    const testModeSelect = document.getElementById('test-mode');
+                    
+                    if (startDateInput) startDateInput.value = this.formatDateForInput(this.state.challengeStartDate);
+                    if (endDateInput) endDateInput.value = this.formatDateForInput(this.state.challengeEndDate);
+                    if (testModeSelect) testModeSelect.value = this.state.testMode ? '1' : '0';
                     
                     this.updateCountdown();
                     this.updateProgressChart();
@@ -2282,6 +2329,11 @@
             updateParticipantsList() {
                 debug("Updating participants list");
                 const container = document.getElementById('participants-grid');
+                if (!container) {
+                    debug("Participants container not found");
+                    return;
+                }
+                
                 container.innerHTML = '';
 
                 if (this.state.participants.length === 0) {
@@ -2368,6 +2420,12 @@
                 const container = document.getElementById('activity-list');
                 const prevBtn = document.getElementById('prev-page');
                 const nextBtn = document.getElementById('next-page');
+                
+                if (!container || !prevBtn || !nextBtn) {
+                    debug("Required elements for activities list not found");
+                    return;
+                }
+                
                 container.innerHTML = '';
 
                 if (this.state.activities.length === 0) {
@@ -2476,11 +2534,14 @@
 
             updateProgressChart() {
                 debug("Updating progress chart");
-                // If no participants, clear the chart
-                if (this.state.participants.length === 0) {
-                    this.progressChart.data.labels = [];
-                    this.progressChart.data.datasets = [];
-                    this.progressChart.update();
+                // If chart is not initialized or no participants, return
+                if (!this.progressChart || this.state.participants.length === 0) {
+                    debug("Chart not initialized or no participants");
+                    if (this.progressChart) {
+                        this.progressChart.data.labels = [];
+                        this.progressChart.data.datasets = [];
+                        this.progressChart.update();
+                    }
                     return;
                 }
 
@@ -2550,6 +2611,11 @@
             updateCountdown() {
                 debug("Updating countdown");
                 const countdownEl = document.getElementById('countdown-timer');
+                if (!countdownEl) {
+                    debug("Countdown element not found");
+                    return;
+                }
+                
                 const now = new Date();
                 
                 // Challenge hasn't started yet
@@ -2574,6 +2640,10 @@
             updateJoinButton() {
                 debug("Updating join button state");
                 const joinBtn = document.getElementById('join-btn');
+                if (!joinBtn) {
+                    debug("Join button not found");
+                    return;
+                }
                 
                 if (this.state.user) {
                     joinBtn.textContent = 'Już uczestniczysz';
@@ -2678,9 +2748,12 @@
                 
                 // Join button
                 debug("Adding join button click handler");
-                document.getElementById('join-btn').addEventListener('click', () => {
-                    this.openJoinModal();
-                });
+                const joinBtn = document.getElementById('join-btn');
+                if (joinBtn) {
+                    joinBtn.addEventListener('click', () => {
+                        this.openJoinModal();
+                    });
+                }
                 
                 // Modal close buttons
                 debug("Adding modal close button handlers");
@@ -2702,95 +2775,139 @@
                         card.classList.add('selected');
                         
                         // Enable connect button
-                        document.getElementById('connect-strava-btn').disabled = false;
+                        const connectBtn = document.getElementById('connect-strava-btn');
+                        if (connectBtn) {
+                            connectBtn.disabled = false;
+                        }
                     });
                 });
                 
                 // Connect Strava button
                 debug("Adding connect Strava button handler");
-                document.getElementById('connect-strava-btn').addEventListener('click', () => {
-                    const selectedRole = document.querySelector('.role-card.selected')?.dataset.role;
-                    
-                    if (selectedRole) {
-                        this.connectWithStrava(selectedRole);
-                    }
-                });
+                const connectStravaBtn = document.getElementById('connect-strava-btn');
+                if (connectStravaBtn) {
+                    connectStravaBtn.addEventListener('click', () => {
+                        const selectedRole = document.querySelector('.role-card.selected')?.dataset.role;
+                        
+                        if (selectedRole) {
+                            this.connectWithStrava(selectedRole);
+                        }
+                    });
+                }
                 
                 // Pagination buttons
                 debug("Adding pagination button handlers");
-                document.getElementById('prev-page').addEventListener('click', () => {
-                    if (this.state.currentPage > 0) {
-                        this.state.currentPage--;
-                        this.updateActivitiesList();
-                    }
-                });
+                const prevPageBtn = document.getElementById('prev-page');
+                const nextPageBtn = document.getElementById('next-page');
                 
-                document.getElementById('next-page').addEventListener('click', () => {
-                    const maxPage = Math.ceil(this.state.activities.length / this.state.itemsPerPage) - 1;
-                    if (this.state.currentPage < maxPage) {
-                        this.state.currentPage++;
-                        this.updateActivitiesList();
-                    }
-                });
+                if (prevPageBtn) {
+                    prevPageBtn.addEventListener('click', () => {
+                        if (this.state.currentPage > 0) {
+                            this.state.currentPage--;
+                            this.updateActivitiesList();
+                        }
+                    });
+                }
+                
+                if (nextPageBtn) {
+                    nextPageBtn.addEventListener('click', () => {
+                        const maxPage = Math.ceil(this.state.activities.length / this.state.itemsPerPage) - 1;
+                        if (this.state.currentPage < maxPage) {
+                            this.state.currentPage++;
+                            this.updateActivitiesList();
+                        }
+                    });
+                }
                 
                 // Admin link
                 debug("Adding admin link handler");
-                document.getElementById('admin-link').addEventListener('click', e => {
-                    e.preventDefault();
-                    this.openAdminModal();
-                });
+                const adminLink = document.getElementById('admin-link');
+                if (adminLink) {
+                    adminLink.addEventListener('click', e => {
+                        e.preventDefault();
+                        this.openAdminModal();
+                    });
+                }
                 
                 // Admin login button
                 debug("Adding admin login button handler");
-                document.getElementById('admin-login-btn').addEventListener('click', () => {
-                    this.loginAdmin();
-                });
+                const adminLoginBtn = document.getElementById('admin-login-btn');
+                if (adminLoginBtn) {
+                    adminLoginBtn.addEventListener('click', () => {
+                        this.loginAdmin();
+                    });
+                }
                 
                 // Admin password input (enter key)
                 debug("Adding admin password keyup handler");
-                document.getElementById('admin-password').addEventListener('keyup', e => {
-                    if (e.key === 'Enter') {
-                        this.loginAdmin();
-                    }
-                });
+                const adminPasswordInput = document.getElementById('admin-password');
+                if (adminPasswordInput) {
+                    adminPasswordInput.addEventListener('keyup', e => {
+                        if (e.key === 'Enter') {
+                            this.loginAdmin();
+                        }
+                    });
+                }
                 
                 // Save challenge dates button
                 debug("Adding save dates button handler");
-                document.getElementById('save-dates-btn').addEventListener('click', () => {
-                    this.saveChallengeSettings();
-                });
+                const saveDatesBtn = document.getElementById('save-dates-btn');
+                if (saveDatesBtn) {
+                    saveDatesBtn.addEventListener('click', () => {
+                        this.saveChallengeSettings();
+                    });
+                }
                 
                 // Toggle test mode button
                 debug("Adding toggle test mode button handler");
-                document.getElementById('toggle-test-btn').addEventListener('click', () => {
-                    this.toggleTestMode();
-                });
+                const toggleTestBtn = document.getElementById('toggle-test-btn');
+                if (toggleTestBtn) {
+                    toggleTestBtn.addEventListener('click', () => {
+                        this.toggleTestMode();
+                    });
+                }
                 
                 // Generate test data button
                 debug("Adding generate test data button handler");
-                document.getElementById('generate-data-btn').addEventListener('click', () => {
-                    const numUsers = parseInt(document.getElementById('test-users').value) || 5;
-                    this.generateTestData(numUsers);
-                });
+                const generateDataBtn = document.getElementById('generate-data-btn');
+                if (generateDataBtn) {
+                    generateDataBtn.addEventListener('click', () => {
+                        const numUsersInput = document.getElementById('test-users');
+                        const numUsers = numUsersInput ? parseInt(numUsersInput.value) || 5 : 5;
+                        this.generateTestData(numUsers);
+                    });
+                }
                 
                 // Reset test data button
                 debug("Adding reset test data button handler");
-                document.getElementById('reset-data-btn').addEventListener('click', () => {
-                    this.resetTestData();
-                });
+                const resetDataBtn = document.getElementById('reset-data-btn');
+                if (resetDataBtn) {
+                    resetDataBtn.addEventListener('click', () => {
+                        this.resetTestData();
+                    });
+                }
                 
                 // Install button
                 debug("Adding install button handler");
-                document.getElementById('install-btn').addEventListener('click', () => {
-                    this.installPWA();
-                });
+                const installBtn = document.getElementById('install-btn');
+                if (installBtn) {
+                    installBtn.addEventListener('click', () => {
+                        this.installPWA();
+                    });
+                }
                 
                 // Close install banner button
                 debug("Adding close install banner button handler");
-                document.getElementById('close-install-btn').addEventListener('click', () => {
-                    document.getElementById('install-banner').classList.remove('visible');
-                    localStorage.setItem('wyzwanie2025_installBannerClosed', 'true');
-                });
+                const closeInstallBtn = document.getElementById('close-install-btn');
+                if (closeInstallBtn) {
+                    closeInstallBtn.addEventListener('click', () => {
+                        const installBanner = document.getElementById('install-banner');
+                        if (installBanner) {
+                            installBanner.classList.remove('visible');
+                            localStorage.setItem('wyzwanie2025_installBannerClosed', 'true');
+                        }
+                    });
+                }
                 
                 // Mobile navigation
                 debug("Adding mobile navigation handlers");
@@ -2818,36 +2935,79 @@
                 debug("Opening join modal");
                 // Reset role selection
                 document.querySelectorAll('.role-card').forEach(card => card.classList.remove('selected'));
-                document.getElementById('connect-strava-btn').disabled = true;
+                
+                const connectBtn = document.getElementById('connect-strava-btn');
+                if (connectBtn) {
+                    connectBtn.disabled = true;
+                }
                 
                 // Show modal
-                document.getElementById('join-modal').classList.add('visible');
+                const joinModal = document.getElementById('join-modal');
+                if (joinModal) {
+                    joinModal.classList.add('visible');
+                }
             }
 
             openAdminModal() {
                 debug("Opening admin modal");
                 // Reset admin form
-                document.getElementById('admin-password').value = '';
-                document.getElementById('admin-login').style.display = 'block';
-                document.getElementById('admin-panel').style.display = 'none';
+                const adminPasswordInput = document.getElementById('admin-password');
+                const adminLoginDiv = document.getElementById('admin-login');
+                const adminPanelDiv = document.getElementById('admin-panel');
+                
+                if (adminPasswordInput) {
+                    adminPasswordInput.value = '';
+                }
+                
+                if (adminLoginDiv) {
+                    adminLoginDiv.style.display = 'block';
+                }
+                
+                if (adminPanelDiv) {
+                    adminPanelDiv.style.display = 'none';
+                }
                 
                 // Show modal
-                document.getElementById('admin-modal').classList.add('visible');
+                const adminModal = document.getElementById('admin-modal');
+                if (adminModal) {
+                    adminModal.classList.add('visible');
+                }
             }
 
             loginAdmin() {
                 debug("Attempting admin login");
-                const password = document.getElementById('admin-password').value;
+                const passwordInput = document.getElementById('admin-password');
+                const adminLoginDiv = document.getElementById('admin-login');
+                const adminPanelDiv = document.getElementById('admin-panel');
+                
+                if (!passwordInput || !adminLoginDiv || !adminPanelDiv) {
+                    debug("Admin login elements not found");
+                    return;
+                }
+                
+                const password = passwordInput.value;
                 
                 if (password === this.adminPassword) {
                     debug("Admin login successful");
-                    document.getElementById('admin-login').style.display = 'none';
-                    document.getElementById('admin-panel').style.display = 'block';
+                    adminLoginDiv.style.display = 'none';
+                    adminPanelDiv.style.display = 'block';
                     
                     // Set form values
-                    document.getElementById('challenge-start').value = this.formatDateForInput(this.state.challengeStartDate);
-                    document.getElementById('challenge-end').value = this.formatDateForInput(this.state.challengeEndDate);
-                    document.getElementById('test-mode').value = this.state.testMode ? '1' : '0';
+                    const startDateInput = document.getElementById('challenge-start');
+                    const endDateInput = document.getElementById('challenge-end');
+                    const testModeSelect = document.getElementById('test-mode');
+                    
+                    if (startDateInput) {
+                        startDateInput.value = this.formatDateForInput(this.state.challengeStartDate);
+                    }
+                    
+                    if (endDateInput) {
+                        endDateInput.value = this.formatDateForInput(this.state.challengeEndDate);
+                    }
+                    
+                    if (testModeSelect) {
+                        testModeSelect.value = this.state.testMode ? '1' : '0';
+                    }
                 } else {
                     debug("Admin login failed - incorrect password");
                     this.showNotification("Błąd logowania", "Niepoprawne hasło administratora.", "error");
@@ -2856,8 +3016,16 @@
 
             async saveChallengeSettings() {
                 debug("Saving challenge settings");
-                const startDate = new Date(document.getElementById('challenge-start').value);
-                const endDate = new Date(document.getElementById('challenge-end').value);
+                const startDateInput = document.getElementById('challenge-start');
+                const endDateInput = document.getElementById('challenge-end');
+                
+                if (!startDateInput || !endDateInput) {
+                    debug("Date inputs not found");
+                    return;
+                }
+                
+                const startDate = new Date(startDateInput.value);
+                const endDate = new Date(endDateInput.value);
                 
                 if (startDate >= endDate) {
                     debug("Invalid date range - start date must be before end date");
@@ -2889,7 +3057,14 @@
 
             async toggleTestMode() {
                 debug("Toggling test mode");
-                const testMode = document.getElementById('test-mode').value === '1';
+                const testModeSelect = document.getElementById('test-mode');
+                
+                if (!testModeSelect) {
+                    debug("Test mode select not found");
+                    return;
+                }
+                
+                const testMode = testModeSelect.value === '1';
                 this.state.testMode = testMode;
                 
                 // Save to Firebase
@@ -2904,7 +3079,8 @@
                     if (testMode && !this.state.activitiesLoaded && this.state.participants.length === 0) {
                         // Generate test data if not already loaded
                         debug("Generating test data since test mode was enabled");
-                        const numUsers = parseInt(document.getElementById('test-users').value) || 5;
+                        const testUsersInput = document.getElementById('test-users');
+                        const numUsers = testUsersInput ? parseInt(testUsersInput.value) || 5 : 5;
                         this.generateTestData(numUsers);
                     }
                     
@@ -3142,7 +3318,10 @@
                 localStorage.setItem('wyzwanie2025_pendingRole', role);
                 
                 // Hide join modal
-                document.getElementById('join-modal').classList.remove('visible');
+                const joinModal = document.getElementById('join-modal');
+                if (joinModal) {
+                    joinModal.classList.remove('visible');
+                }
                 
                 // Show loading modal
                 this.showLoadingModal("Przekierowywanie do Strava...");
@@ -3308,11 +3487,11 @@
                     
                     // Fetch athlete data from Strava API
                     const corsProxy = 'https://cors-anywhere.herokuapp.com/';
-const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`, {
-  headers: {
-    'Authorization': `Bearer ${this.state.tokens.accessToken}`
-  }
-});
+                    const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`, {
+                        headers: {
+                            'Authorization': `Bearer ${this.state.tokens.accessToken}`
+                        }
+                    });
                     
                     if (!response.ok) {
                         throw new Error('Strava athlete data fetch failed');
@@ -3749,12 +3928,14 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
                         // Find participant
                         const participant = this.state.participants.find(p => p.id === activity.participantId);
                         
-                        // Show notification
-                        this.showNotification(
-                            "Wysłano piątkę!", 
-                            `Wysłałeś piątkę dla aktywności "${activity.name}" użytkownika ${participant.name}.`, 
-                            "success"
-                        );
+                        if (participant) {
+                            // Show notification
+                            this.showNotification(
+                                "Wysłano piątkę!", 
+                                `Wysłałeś piątkę dla aktywności "${activity.name}" użytkownika ${participant.name}.`, 
+                                "success"
+                            );
+                        }
                         
                         debug("High five sent successfully");
                     } catch (error) {
@@ -3768,21 +3949,29 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
 
             showLoadingModal(message) {
                 debug(`Showing loading modal: ${message}`);
-                document.getElementById('loading-message').textContent = message;
-                document.getElementById('loading-modal').classList.add('visible');
+                const loadingMessage = document.getElementById('loading-message');
+                const loadingModal = document.getElementById('loading-modal');
+                
+                if (loadingMessage) loadingMessage.textContent = message;
+                if (loadingModal) loadingModal.classList.add('visible');
             }
 
             hideLoadingModal() {
                 debug("Hiding loading modal");
-                document.getElementById('loading-modal').classList.remove('visible');
+                const loadingModal = document.getElementById('loading-modal');
+                if (loadingModal) loadingModal.classList.remove('visible');
             }
 
             showNotification(title, message, type = 'info') {
                 debug(`Showing notification: ${title}`, { message, type });
                 const notification = document.getElementById('notification');
+                if (!notification) return;
+                
                 const notificationTitle = notification.querySelector('.notification-title');
                 const notificationText = document.getElementById('notification-text');
                 const notificationIcon = notification.querySelector('.notification-icon i');
+                
+                if (!notificationTitle || !notificationText || !notificationIcon) return;
                 
                 // Set content
                 notificationTitle.textContent = title;
@@ -3820,6 +4009,8 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
             showConfetti() {
                 debug("Showing confetti animation");
                 const container = document.getElementById('confetti-container');
+                if (!container) return;
+                
                 container.innerHTML = '';
                 
                 const colors = ['#f44336', '#2196F3', '#FFEB3B', '#4CAF50', '#9C27B0'];
@@ -3853,22 +4044,22 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
                 return date.toISOString().split('T')[0];
             }
 
-           initServiceWorker() {
-    debug("Initializing service worker");
-    if ('serviceWorker' in navigator) {
-        // Zarejestruj service worker z pliku
-        navigator.serviceWorker.register('/wyzwanie2025beta/service-worker.js')
-            .then((registration) => {
-                debug('Service Worker registered with scope:', registration.scope);
-            })
-            .catch((error) => {
-                debug('Service Worker registration failed:', error);
-                console.error('Service Worker registration failed:', error);
-            });
-    } else {
-        debug("Service Worker API not available in this browser");
-    }
-}
+            initServiceWorker() {
+                debug("Initializing service worker");
+                if ('serviceWorker' in navigator) {
+                    // Zarejestruj service worker z pliku
+                    navigator.serviceWorker.register('/wyzwanie2025beta/service-worker.js')
+                        .then((registration) => {
+                            debug('Service Worker registered with scope:', registration.scope);
+                        })
+                        .catch((error) => {
+                            debug('Service Worker registration failed:', error);
+                            console.error('Service Worker registration failed:', error);
+                        });
+                } else {
+                    debug("Service Worker API not available in this browser");
+                }
+            }
 
             setupPWA() {
                 debug("Setting up PWA installation");
@@ -3883,15 +4074,21 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
                     
                     // Show the install banner if not previously closed
                     const bannerClosed = localStorage.getItem('wyzwanie2025_installBannerClosed');
-                    if (!bannerClosed) {
-                        document.getElementById('install-banner').classList.add('visible');
+                    const installBanner = document.getElementById('install-banner');
+                    
+                    if (!bannerClosed && installBanner) {
+                        installBanner.classList.add('visible');
                     }
                 });
                 
                 // Listen for app installed event
                 window.addEventListener('appinstalled', () => {
                     // Hide the install banner
-                    document.getElementById('install-banner').classList.remove('visible');
+                    const installBanner = document.getElementById('install-banner');
+                    if (installBanner) {
+                        installBanner.classList.remove('visible');
+                    }
+                    
                     // Clear the deferredPrompt
                     this.state.deferredPrompt = null;
                     // Log the installation
@@ -3932,15 +4129,22 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
                 
                 // Show error notification
                 const notification = document.getElementById('notification');
-                const notificationTitle = notification.querySelector('.notification-title');
-                const notificationText = document.getElementById('notification-text');
-                const notificationIcon = notification.querySelector('.notification-icon i');
-                
-                notificationTitle.textContent = "Błąd inicjalizacji";
-                notificationText.textContent = "Wystąpił problem podczas ładowania aplikacji. Odśwież stronę lub spróbuj ponownie później.";
-                notificationIcon.className = 'fa-solid fa-bug';
-                notificationIcon.style.color = '#e74c3c';
-                
-                notification.classList.add('visible');
+                if (notification) {
+                    const notificationTitle = notification.querySelector('.notification-title');
+                    const notificationText = document.getElementById('notification-text');
+                    const notificationIcon = notification.querySelector('.notification-icon i');
+                    
+                    if (notificationTitle && notificationText && notificationIcon) {
+                        notificationTitle.textContent = "Błąd inicjalizacji";
+                        notificationText.textContent = "Wystąpił problem podczas ładowania aplikacji. Odśwież stronę lub spróbuj ponownie później.";
+                        notificationIcon.className = 'fa-solid fa-bug';
+                        notificationIcon.style.color = '#e74c3c';
+                        
+                        notification.classList.add('visible');
+                    }
+                }
             }
         });
+    </script>
+</body>
+</html>
