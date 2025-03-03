@@ -3857,7 +3857,7 @@ const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`
     debug("Initializing service worker");
     if ('serviceWorker' in navigator) {
         // Zarejestruj service worker z pliku
-        navigator.serviceWorker.register('/service-worker.js')
+        navigator.serviceWorker.register('/wyzwanie2025beta/service-worker.js')
             .then((registration) => {
                 debug('Service Worker registered with scope:', registration.scope);
             })
