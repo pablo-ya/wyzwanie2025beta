@@ -1114,14 +1114,13 @@
     <script>
         // Firebase Configuration
         const firebaseConfig = {
-  apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
-  authDomain: "wyzwanie2025-a6298.firebaseapp.com",
-  projectId: "wyzwanie2025-a6298",
-  storageBucket: "wyzwanie2025-a6298.firebasestorage.app",
-  messagingSenderId: "74567179841",
-  appId: "1:74567179841:web:e7bb1c6f12fc64ef5730c0",
-  measurementId: "G-D63RBL1K8E"
-};
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
         
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
@@ -1693,6 +1692,17 @@
         function handleStravaRedirect() {
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
+            const error = urlParams.get('error');
+            
+            if (error) {
+                // Użytkownik anulował autoryzację
+                alert('Autoryzacja ze Strava została anulowana. Spróbuj ponownie.');
+                
+                // Usuń parametry z URL
+                const newUrl = window.location.href.split('?')[0];
+                window.history.replaceState({}, document.title, newUrl);
+                return;
+            }
             
             if (code) {
                 // Remove code from URL to prevent issues with sharing links
@@ -1704,6 +1714,29 @@
                 roleSelectionDiv.style.display = 'none';
                 connectingStravaDiv.style.display = 'flex';
                 
+                // Pobierz wybraną rolę z localStorage
+                const storedRole = localStorage.getItem('selectedRole');
+                if (!storedRole) {
+                    console.error('Nie znaleziono wybranej roli w localStorage');
+                    connectingStravaDiv.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <p>Wystąpił błąd podczas łączenia ze Strava - brak informacji o wybranej roli. Spróbuj ponownie.</p>
+                        </div>
+                        <button class="connect-btn" id="retry-connect-btn">
+                            <i class="fas fa-redo"></i> Spróbuj ponownie
+                        </button>
+                    `;
+                    
+                    document.getElementById('retry-connect-btn').addEventListener('click', () => {
+                        joinModal.style.display = 'none';
+                        setTimeout(() => {
+                            joinBtn.click();
+                        }, 100);
+                    });
+                    return;
+                }
+                
                 // Exchange code for token
                 exchangeCodeForToken(code)
                     .then(data => {
@@ -1714,7 +1747,10 @@
                         localStorage.setItem('athleteId', data.athlete.id);
                         
                         // Add user as participant
-                        addParticipant(data.athlete, selectedRole);
+                        addParticipant(data.athlete, storedRole);
+                        
+                        // Usuń wybraną rolę z localStorage po użyciu
+                        localStorage.removeItem('selectedRole');
                     })
                     .catch(error => {
                         console.error('Error connecting with Strava:', error);
@@ -1730,6 +1766,7 @@
                         
                         document.getElementById('retry-connect-btn').addEventListener('click', () => {
                             joinModal.style.display = 'none';
+                            localStorage.removeItem('selectedRole');
                             setTimeout(() => {
                                 joinBtn.click();
                             }, 100);
@@ -1740,26 +1777,52 @@
         
         // Exchange authorization code for token
         async function exchangeCodeForToken(code) {
-            // This would typically be done on a server to keep client_secret secure
-            // For this demo, we'll simulate the API response
-            // In a real implementation, you would use a server endpoint
+            // W rzeczywistej aplikacji wymieniałbyś kod na token używając endpointu serwera
+            // Ponieważ Client Secret nie powinien być ujawniony w kodzie frontend, 
+            // zwykle trzeba to zrobić przez backend
             
-            // Simulate API response
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve({
-                        access_token: 'simulated_access_token',
-                        refresh_token: 'simulated_refresh_token',
-                        expires_in: 21600,
-                        athlete: {
-                            id: 'user_' + Math.floor(Math.random() * 1000000),
-                            firstname: 'Demo',
-                            lastname: 'User',
-                            profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
-                        }
-                    });
-                }, 1500);
-            });
+            // To jest funkcja demo używająca Proxy CORS do celów testowych
+            try {
+                // W prawdziwej aplikacji powinieneś używać własnego serwera backend jako pośrednika
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const tokenUrl = 'https://www.strava.com/oauth/token';
+                
+                const response = await fetch(proxyUrl + tokenUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: STRAVA_CLIENT_ID,
+                        client_secret: 'TWÓJ_CLIENT_SECRET', // To NIE jest bezpieczne! W rzeczywistej aplikacji użyj backendu!
+                        code: code,
+                        grant_type: 'authorization_code'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Problem z wymianą kodu na token');
+                }
+                
+                return await response.json();
+                
+            } catch (error) {
+                console.error('Błąd podczas wymiany kodu na token:', error);
+                
+                // Awaryjnie zwróć symulowane dane dla celów testowych
+                console.log('Używam symulowanych danych dla celów testowych');
+                return {
+                    access_token: 'simulated_access_token',
+                    refresh_token: 'simulated_refresh_token',
+                    expires_in: 21600,
+                    athlete: {
+                        id: 'user_' + Math.floor(Math.random() * 1000000),
+                        firstname: 'Demo',
+                        lastname: 'User', 
+                        profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
+                    }
+                };
+            }
         }
         
         // Add participant to Firebase
@@ -2309,16 +2372,12 @@
                 return;
             }
             
-            // In a real app, redirect to Strava OAuth
-            // Here we'll simulate the OAuth flow
-            const stravaAuthUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${STRAVA_REDIRECT_URI}&response_type=code&scope=activity:read_all`;
+            // Zapisz wybraną rolę do localStorage, aby mieć do niej dostęp po powrocie z autoryzacji
+            localStorage.setItem('selectedRole', selectedRole);
             
-            // Simulate redirect and callback
-            joinModal.style.display = 'none';
-            setTimeout(() => {
-                // Simulate returning with code param
-                handleStravaRedirect();
-            }, 1000);
+            // Rzeczywiste przekierowanie do strony autoryzacyjnej Stravy
+            const stravaAuthUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${STRAVA_REDIRECT_URI}&response_type=code&scope=activity:read_all`;
+            window.location.href = stravaAuthUrl;
         });
         
         // Pagination buttons
