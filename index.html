@@ -2748,20 +2748,25 @@ ICB9CiAgXQp9">
                     });
                 });
                 
-                // Role selection
-                debug("Adding role selection handlers");
-                document.querySelectorAll('.role-card').forEach(card => {
-                    card.addEventListener('click', () => {
-                        // Remove selected class from all cards
-                        document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
-                        
-                        // Add selected class to clicked card
-                        card.classList.add('selected');
-                        
-                        // Enable connect button
-                        document.getElementById('connect-strava-btn').disabled = false;
-                    });
-                });
+               // Role selection
+debug("Adding role selection handlers");
+document.querySelectorAll('.role-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+        debug(`Role card clicked: ${card.dataset.role}`);
+        
+        // Remove selected class from all cards
+        document.querySelectorAll('.role-card').forEach(c => {
+            c.classList.remove('selected');
+        });
+        
+        // Add selected class to clicked card
+        card.classList.add('selected');
+        
+        // Enable connect button
+        const connectBtn = document.getElementById('connect-strava-btn');
+        connectBtn.disabled = false;
+    });
+});
                 
                 // Connect Strava button
                 debug("Adding connect Strava button handler");
