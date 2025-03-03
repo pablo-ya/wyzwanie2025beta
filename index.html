@@ -3307,11 +3307,12 @@
                     }
                     
                     // Fetch athlete data from Strava API
-                    const response = await fetch('https://www.strava.com/api/v3/athlete', {
-                        headers: {
-                            'Authorization': `Bearer ${this.state.tokens.accessToken}`
-                        }
-                    });
+                    const corsProxy = 'https://cors-anywhere.herokuapp.com/';
+const response = await fetch(`${corsProxy}https://www.strava.com/api/v3/athlete`, {
+  headers: {
+    'Authorization': `Bearer ${this.state.tokens.accessToken}`
+  }
+});
                     
                     if (!response.ok) {
                         throw new Error('Strava athlete data fetch failed');
@@ -3852,63 +3853,22 @@
                 return date.toISOString().split('T')[0];
             }
 
-            initServiceWorker() {
-                debug("Initializing service worker");
-                if ('serviceWorker' in navigator) {
-                    // Register service worker from inline script
-                    const swCode = `
-                        self.addEventListener('install', (event) => {
-                            event.waitUntil(
-                                caches.open('wyzwanie2025-v1').then((cache) => {
-                                    return cache.addAll([
-                                        './',
-                                        './index.html'
-                                    ]);
-                                })
-                            );
-                        });
-                        
-                        self.addEventListener('fetch', (event) => {
-                            // Don't cache Firebase API calls and Strava API calls
-                            if (event.request.url.includes('firebaseio.com') || 
-                                event.request.url.includes('api.strava.com')) {
-                                return fetch(event.request);
-                            }
-                            
-                            event.respondWith(
-                                caches.match(event.request).then((response) => {
-                                    return response || fetch(event.request).then((fetchRes) => {
-                                        return caches.open('wyzwanie2025-v1').then((cache) => {
-                                            cache.put(event.request, fetchRes.clone());
-                                            return fetchRes;
-                                        });
-                                    });
-                                }).catch(() => {
-                                    // Return offline fallback
-                                    if (event.request.headers.get('accept').includes('text/html')) {
-                                        return caches.match('./index.html');
-                                    }
-                                })
-                            );
-                        });
-                    `;
-                    
-                    // Create a Blob containing the service worker code
-                    const blob = new Blob([swCode], {type: 'application/javascript'});
-                    const swUrl = URL.createObjectURL(blob);
-                    
-                    // Register the service worker
-                    navigator.serviceWorker.register(swUrl)
-                        .then((registration) => {
-                            debug('Service Worker registered with scope:', registration.scope);
-                        })
-                        .catch((error) => {
-                            debug('Service Worker registration failed:', error);
-                        });
-                } else {
-                    debug("Service Worker API not available in this browser");
-                }
-            }
+           initServiceWorker() {
+    debug("Initializing service worker");
+    if ('serviceWorker' in navigator) {
+        // Zarejestruj service worker z pliku
+        navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+                debug('Service Worker registered with scope:', registration.scope);
+            })
+            .catch((error) => {
+                debug('Service Worker registration failed:', error);
+                console.error('Service Worker registration failed:', error);
+            });
+    } else {
+        debug("Service Worker API not available in this browser");
+    }
+}
 
             setupPWA() {
                 debug("Setting up PWA installation");
