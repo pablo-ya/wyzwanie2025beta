@@ -1114,21 +1114,22 @@
     <script>
         // Firebase Configuration
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
+  apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
+  authDomain: "wyzwanie2025-a6298.firebaseapp.com",
+  projectId: "wyzwanie2025-a6298",
+  storageBucket: "wyzwanie2025-a6298.firebasestorage.app",
+  messagingSenderId: "74567179841",
+  appId: "1:74567179841:web:e7bb1c6f12fc64ef5730c0",
+  measurementId: "G-D63RBL1K8E"
+};
         
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         
         // Strava API Configuration
-        const STRAVA_CLIENT_ID = "150694";
-        const STRAVA_REDIRECT_URI = window.location.href;
+        const STRAVA_CLIENT_ID = "150694"; // Zastąp swoim prawdziwym CLIENT_ID
+        const STRAVA_REDIRECT_URI = window.location.href.split('?')[0]; // Obecna strona bez parametrów
         
         // Global Variables
         let participants = [];
@@ -1705,6 +1706,8 @@
             }
             
             if (code) {
+                console.log('Otrzymano kod autoryzacyjny:', code);
+                
                 // Remove code from URL to prevent issues with sharing links
                 const newUrl = window.location.href.split('?')[0];
                 window.history.replaceState({}, document.title, newUrl);
@@ -1740,6 +1743,8 @@
                 // Exchange code for token
                 exchangeCodeForToken(code)
                     .then(data => {
+                        console.log('Otrzymano dane atlety:', data.athlete);
+                        
                         // Save token to localStorage
                         localStorage.setItem('stravaToken', data.access_token);
                         localStorage.setItem('refreshToken', data.refresh_token);
@@ -1758,6 +1763,7 @@
                             <div class="error-message">
                                 <i class="fas fa-exclamation-circle"></i>
                                 <p>Wystąpił błąd podczas łączenia ze Strava. Spróbuj ponownie.</p>
+                                <p>Szczegóły błędu: ${error.message || 'Nieznany błąd'}</p>
                             </div>
                             <button class="connect-btn" id="retry-connect-btn">
                                 <i class="fas fa-redo"></i> Spróbuj ponownie
@@ -1777,13 +1783,14 @@
         
         // Exchange authorization code for token
         async function exchangeCodeForToken(code) {
-            // W rzeczywistej aplikacji wymieniałbyś kod na token używając endpointu serwera
-            // Ponieważ Client Secret nie powinien być ujawniony w kodzie frontend, 
-            // zwykle trzeba to zrobić przez backend
+            console.log('Wymiana kodu autoryzacyjnego na token...');
             
-            // To jest funkcja demo używająca Proxy CORS do celów testowych
+            // UWAGA: W prawdziwej aplikacji produkcyjnej NIGDY nie powinieneś umieszczać 
+            // CLIENT_SECRET w kodzie frontendu. To tylko dla celów demonstracyjnych.
+            const STRAVA_CLIENT_SECRET = 'd780e7a6e9bd2493f4e578d5206d4b6921c0a775'; // Zastąp swoim prawdziwym CLIENT_SECRET
+            
             try {
-                // W prawdziwej aplikacji powinieneś używać własnego serwera backend jako pośrednika
+                // Użyj proxy CORS aby ominąć ograniczenia CORS
                 const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
                 const tokenUrl = 'https://www.strava.com/oauth/token';
                 
@@ -1794,34 +1801,26 @@
                     },
                     body: JSON.stringify({
                         client_id: STRAVA_CLIENT_ID,
-                        client_secret: 'TWÓJ_CLIENT_SECRET', // To NIE jest bezpieczne! W rzeczywistej aplikacji użyj backendu!
+                        client_secret: STRAVA_CLIENT_SECRET,
                         code: code,
                         grant_type: 'authorization_code'
                     })
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Problem z wymianą kodu na token');
+                    const errorText = await response.text();
+                    console.error('Problem z odpowiedzią Strava:', errorText);
+                    throw new Error(`Problem z wymianą kodu na token: ${response.status} ${response.statusText}`);
                 }
                 
-                return await response.json();
+                const data = await response.json();
+                console.log('Otrzymano odpowiedź z tokenem Strava:', data);
+                return data;
                 
             } catch (error) {
                 console.error('Błąd podczas wymiany kodu na token:', error);
-                
-                // Awaryjnie zwróć symulowane dane dla celów testowych
-                console.log('Używam symulowanych danych dla celów testowych');
-                return {
-                    access_token: 'simulated_access_token',
-                    refresh_token: 'simulated_refresh_token',
-                    expires_in: 21600,
-                    athlete: {
-                        id: 'user_' + Math.floor(Math.random() * 1000000),
-                        firstname: 'Demo',
-                        lastname: 'User', 
-                        profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
-                    }
-                };
+                alert('Wystąpił błąd podczas łączenia ze Strava. Szczegóły w konsoli developera.');
+                throw error;
             }
         }
         
@@ -1892,49 +1891,64 @@
             }
         }
         
-        // Simulate fetching activities from Strava API
-        function fetchStravaActivities() {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    // Generate random activities for demo
-                    const activities = [];
-                    const types = ['Run', 'Ride'];
-                    const names = [
-                        'Morning Run', 'Afternoon Ride', 'Evening Run', 
-                        'Weekend Long Run', 'Recovery Ride', 'Trail Run',
-                        'Commute', 'Tempo Run', 'Intervals', 'Group Ride'
-                    ];
-                    
-                    // Generate 5-15 random activities
-                    const count = Math.floor(Math.random() * 10) + 5;
-                    
-                    for (let i = 0; i < count; i++) {
-                        const type = types[Math.floor(Math.random() * types.length)];
-                        const name = names[Math.floor(Math.random() * names.length)];
-                        const distance = (Math.random() * 20 + 3) * 1000; // 3-23km in meters
-                        const movingTime = distance * (Math.random() * 30 + 240); // 4-7 min/km pace
-                        const averageSpeed = type === 'Run' ? distance / movingTime * 3600 : distance / movingTime * 3600 * 2; // km/h
-                        
-                        // Random date between challenge start and now (or earlier for testing)
-                        const now = new Date();
-                        const minDate = new Date(now);
-                        minDate.setMonth(minDate.getMonth() - 3); // Up to 3 months ago
-                        const randomDate = new Date(minDate.getTime() + Math.random() * (now.getTime() - minDate.getTime()));
-                        
-                        activities.push({
-                            id: 'activity_' + Math.floor(Math.random() * 1000000),
-                            name: name,
-                            type: type,
-                            distance: distance,
-                            movingTime: movingTime,
-                            averageSpeed: averageSpeed,
-                            startDate: randomDate
-                        });
+        // Fetch activities from Strava API
+        async function fetchStravaActivities() {
+            const token = localStorage.getItem('stravaToken');
+            if (!token) {
+                console.error('Brak tokenu Strava!');
+                return [];
+            }
+            
+            try {
+                console.log('Pobieranie aktywności z API Strava...');
+                
+                // Ustal zakres dat - pobierz aktywności od początku wyzwania lub z ostatnich 3 miesięcy
+                const now = new Date();
+                const threeMonthsAgo = new Date(now);
+                threeMonthsAgo.setMonth(now.getMonth() - 3);
+                
+                const startTime = Math.max(
+                    threeMonthsAgo.getTime() / 1000,
+                    challengeParams.startDate.getTime() / 1000
+                );
+                
+                // Użyj proxy CORS aby ominąć ograniczenia CORS
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const activitiesUrl = `https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`;
+                
+                const response = await fetch(proxyUrl + activitiesUrl, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
                     }
-                    
-                    resolve(activities);
-                }, 1000);
-            });
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Problem z pobieraniem aktywności Strava:', errorText);
+                    throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
+                }
+                
+                const activities = await response.json();
+                console.log(`Pobrano ${activities.length} aktywności z API Strava`);
+                
+                // Przetwórz odpowiedź na format używany w aplikacji
+                return activities.map(a => ({
+                    id: a.id.toString(),
+                    name: a.name,
+                    type: a.type,
+                    distance: a.distance, // w metrach
+                    movingTime: a.moving_time, // w sekundach
+                    averageSpeed: a.average_speed * 3.6, // konwersja z m/s na km/h
+                    startDate: new Date(a.start_date)
+                }));
+                
+            } catch (error) {
+                console.error('Błąd podczas pobierania aktywności z API Strava:', error);
+                alert('Wystąpił błąd podczas pobierania aktywności. Szczegóły w konsoli developera.');
+                
+                // W przypadku błędu zwróć pustą tablicę
+                return [];
+            }
         }
         
         // Add activities to Firebase
