@@ -1107,6 +1107,43 @@ ICB9CiAgXQp9">
             margin-bottom: 4px;
         }
 
+        /* Debug overlay */
+        #debug-overlay {
+            position: fixed;
+            bottom: 60px;
+            left: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 10000;
+            overflow-y: auto;
+            max-height: 200px;
+            display: none;
+        }
+
+        #debug-overlay pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        #debug-toggle {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10001;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
         /* Responsive styles */
         @media (max-width: 768px) {
             .participants-grid {
@@ -1173,9 +1210,14 @@ ICB9CiAgXQp9">
         .fa-map-marker:before { content: "📍"; }
         .fa-chevron-left:before { content: "◀"; }
         .fa-chevron-right:before { content: "▶"; }
+        .fa-bug:before { content: "🐛"; }
     </style>
 </head>
 <body>
+    <!-- Debug tools -->
+    <div id="debug-overlay"></div>
+    <button id="debug-toggle">Debug</button>
+
     <header>
         <h1>Wyzwanie 2025</h1>
     </header>
@@ -1228,6 +1270,10 @@ ICB9CiAgXQp9">
             </div>
             <div id="participants-grid" class="participants-grid">
                 <!-- Participants will be dynamically added here -->
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Ładowanie uczestników...</p>
+                </div>
             </div>
         </section>
 
@@ -1239,6 +1285,10 @@ ICB9CiAgXQp9">
             </div>
             <ul id="activity-list" class="activity-list">
                 <!-- Activities will be dynamically added here -->
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Ładowanie aktywności...</p>
+                </div>
             </ul>
             <div class="pagination">
                 <button id="prev-page" class="page-btn" disabled>
@@ -1443,7 +1493,55 @@ ICB9CiAgXQp9">
     <div id="confetti-container" class="confetti-container"></div>
 
     <script>
-        // Firebase Configuration - Replace with your own Firebase config
+        // Debugging tools
+        const debugElement = document.getElementById('debug-overlay');
+        const debugToggle = document.getElementById('debug-toggle');
+        let debugEnabled = false;
+
+        // Enable debug mode with 3 taps on the header
+        let tapCount = 0;
+        const header = document.querySelector('header');
+        header.addEventListener('click', () => {
+            tapCount++;
+            if (tapCount >= 3) {
+                debugEnabled = !debugEnabled;
+                debugElement.style.display = debugEnabled ? 'block' : 'none';
+                debugToggle.style.display = debugEnabled ? 'block' : 'none';
+                debug('Debug mode ' + (debugEnabled ? 'activated' : 'deactivated'));
+                tapCount = 0;
+            }
+            setTimeout(() => { tapCount = 0 }, 500);
+        });
+
+        debugToggle.addEventListener('click', () => {
+            debugEnabled = !debugEnabled;
+            debugElement.style.display = debugEnabled ? 'block' : 'none';
+            debug('Debug mode ' + (debugEnabled ? 'activated' : 'deactivated'));
+        });
+
+        function debug(message, obj = null) {
+            if (debugEnabled) {
+                const timestamp = new Date().toISOString().substring(11, 23);
+                let logMessage = `[${timestamp}] ${message}`;
+                
+                if (obj) {
+                    try {
+                        logMessage += '\n' + JSON.stringify(obj, null, 2);
+                    } catch (e) {
+                        logMessage += '\n[Object cannot be stringified]';
+                    }
+                }
+                
+                console.log(logMessage);
+                
+                const pre = document.createElement('pre');
+                pre.textContent = logMessage;
+                debugElement.appendChild(pre);
+                debugElement.scrollTop = debugElement.scrollHeight;
+            }
+        }
+
+        // Tryb testowy Firebase (do zastąpienia prawidłową konfiguracją)
         const firebaseConfig = {
   apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
   authDomain: "wyzwanie2025-a6298.firebaseapp.com",
@@ -1454,86 +1552,176 @@ ICB9CiAgXQp9">
   measurementId: "G-D63RBL1K8E"
         };
 
-        // Firebase Database Manager
+        // Uproszczona implementacja dla testowania
+        let localFirestore = {
+            participants: [],
+            activities: [],
+            settings: {
+                startDate: new Date('2025-04-01').toISOString(),
+                endDate: new Date('2025-09-30').toISOString(),
+                testMode: true
+            }
+        };
+
+        // Firebase Database Manager with fallback
         class FirebaseManager {
             constructor() {
-                // Initialize Firebase
-                firebase.initializeApp(firebaseConfig);
-                this.db = firebase.firestore();
-                this.auth = firebase.auth();
+                this.useLocalFallback = true;
+                this.db = null;
+                this.auth = null;
                 
-                // Enable offline persistence
-                this.db.enablePersistence()
-                    .catch(err => {
-                        console.error('Firebase persistence error:', err);
-                    });
+                // Try to initialize Firebase
+                try {
+                    debug('Initializing Firebase');
+                    firebase.initializeApp(firebaseConfig);
+                    this.db = firebase.firestore();
+                    this.auth = firebase.auth();
+                    this.useLocalFallback = false;
+                    debug('Firebase initialized successfully');
+                    
+                    // Enable offline persistence if Firebase is working
+                    this.db.enablePersistence()
+                        .then(() => {
+                            debug('Firebase offline persistence enabled');
+                        })
+                        .catch(err => {
+                            debug('Firebase persistence error:', err);
+                        });
+                } catch (error) {
+                    debug('Firebase initialization error - using local fallback:', error);
+                    this.showNotification("Używam trybu lokalnego", "Firebase nie jest skonfigurowany lub niedostępny. Dane będą przechowywane lokalnie.", "warning");
+                }
+            }
+            
+            // Helper to check if we should use local fallback
+            _shouldUseLocalFallback() {
+                return this.useLocalFallback || !this.db;
             }
             
             // Authentication methods
             async signInAnonymously() {
+                if (this._shouldUseLocalFallback()) {
+                    debug('Using local fallback for anonymous auth');
+                    return { user: { uid: 'local-' + Date.now() } };
+                }
+                
                 try {
+                    debug('Attempting Firebase anonymous sign-in');
                     return await this.auth.signInAnonymously();
                 } catch (error) {
-                    console.error('Anonymous sign-in error:', error);
-                    throw error;
-                }
-            }
-            
-            async createCustomToken(stravaId) {
-                // In a real app, this would be done server-side
-                // For demo, we're using anonymous auth
-                try {
-                    const userCredential = await this.signInAnonymously();
-                    return userCredential.user.uid;
-                } catch (error) {
-                    console.error('Custom token error:', error);
-                    throw error;
+                    debug('Anonymous sign-in error:', error);
+                    this.useLocalFallback = true;
+                    return { user: { uid: 'local-' + Date.now() } };
                 }
             }
             
             // Participants methods
             async saveParticipant(participant) {
+                debug('Saving participant', participant);
+                if (this._shouldUseLocalFallback()) {
+                    const existingIndex = localFirestore.participants.findIndex(p => p.id === participant.id);
+                    if (existingIndex >= 0) {
+                        localFirestore.participants[existingIndex] = participant;
+                    } else {
+                        localFirestore.participants.push(participant);
+                    }
+                    localStorage.setItem('wyzwanie2025_participants', JSON.stringify(localFirestore.participants));
+                    return true;
+                }
+                
                 try {
                     await this.db.collection('participants').doc(participant.id).set(participant);
                     return true;
                 } catch (error) {
-                    console.error('Save participant error:', error);
-                    throw error;
+                    debug('Save participant error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.saveParticipant(participant);
                 }
             }
             
             async getParticipants() {
+                debug('Getting participants');
+                if (this._shouldUseLocalFallback()) {
+                    const storedParticipants = localStorage.getItem('wyzwanie2025_participants');
+                    if (storedParticipants) {
+                        localFirestore.participants = JSON.parse(storedParticipants);
+                    }
+                    return localFirestore.participants;
+                }
+                
                 try {
                     const snapshot = await this.db.collection('participants').get();
                     return snapshot.docs.map(doc => doc.data());
                 } catch (error) {
-                    console.error('Get participants error:', error);
-                    return [];
+                    debug('Get participants error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.getParticipants();
                 }
             }
             
             async updateParticipant(participantId, data) {
+                debug(`Updating participant ${participantId}`, data);
+                if (this._shouldUseLocalFallback()) {
+                    const existingIndex = localFirestore.participants.findIndex(p => p.id === participantId);
+                    if (existingIndex >= 0) {
+                        localFirestore.participants[existingIndex] = {
+                            ...localFirestore.participants[existingIndex],
+                            ...data
+                        };
+                        localStorage.setItem('wyzwanie2025_participants', JSON.stringify(localFirestore.participants));
+                    }
+                    return true;
+                }
+                
                 try {
                     await this.db.collection('participants').doc(participantId).update(data);
                     return true;
                 } catch (error) {
-                    console.error('Update participant error:', error);
-                    throw error;
+                    debug('Update participant error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.updateParticipant(participantId, data);
                 }
             }
             
             // Activities methods
             async saveActivity(activity) {
+                debug('Saving activity', activity);
+                if (this._shouldUseLocalFallback()) {
+                    const existingIndex = localFirestore.activities.findIndex(a => a.id === activity.id);
+                    if (existingIndex >= 0) {
+                        localFirestore.activities[existingIndex] = activity;
+                    } else {
+                        localFirestore.activities.push(activity);
+                    }
+                    localStorage.setItem('wyzwanie2025_activities', JSON.stringify(localFirestore.activities));
+                    return true;
+                }
+                
                 try {
                     await this.db.collection('activities').doc(activity.id).set(activity);
                     return true;
                 } catch (error) {
-                    console.error('Save activity error:', error);
-                    throw error;
+                    debug('Save activity error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.saveActivity(activity);
                 }
             }
             
             async saveActivities(activities) {
+                debug(`Saving ${activities.length} activities`);
+                if (this._shouldUseLocalFallback()) {
+                    activities.forEach(activity => {
+                        const existingIndex = localFirestore.activities.findIndex(a => a.id === activity.id);
+                        if (existingIndex >= 0) {
+                            localFirestore.activities[existingIndex] = activity;
+                        } else {
+                            localFirestore.activities.push(activity);
+                        }
+                    });
+                    localStorage.setItem('wyzwanie2025_activities', JSON.stringify(localFirestore.activities));
+                    return true;
+                }
+                
                 try {
                     const batch = this.db.batch();
                     
@@ -1545,43 +1733,85 @@ ICB9CiAgXQp9">
                     await batch.commit();
                     return true;
                 } catch (error) {
-                    console.error('Save activities batch error:', error);
-                    throw error;
+                    debug('Save activities batch error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.saveActivities(activities);
                 }
             }
             
             async getActivities() {
+                debug('Getting activities');
+                if (this._shouldUseLocalFallback()) {
+                    const storedActivities = localStorage.getItem('wyzwanie2025_activities');
+                    if (storedActivities) {
+                        localFirestore.activities = JSON.parse(storedActivities);
+                    }
+                    return localFirestore.activities;
+                }
+                
                 try {
                     const snapshot = await this.db.collection('activities').get();
                     return snapshot.docs.map(doc => doc.data());
                 } catch (error) {
-                    console.error('Get activities error:', error);
-                    return [];
+                    debug('Get activities error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.getActivities();
                 }
             }
             
             async updateActivity(activityId, data) {
+                debug(`Updating activity ${activityId}`, data);
+                if (this._shouldUseLocalFallback()) {
+                    const existingIndex = localFirestore.activities.findIndex(a => a.id === activityId);
+                    if (existingIndex >= 0) {
+                        localFirestore.activities[existingIndex] = {
+                            ...localFirestore.activities[existingIndex],
+                            ...data
+                        };
+                        localStorage.setItem('wyzwanie2025_activities', JSON.stringify(localFirestore.activities));
+                    }
+                    return true;
+                }
+                
                 try {
                     await this.db.collection('activities').doc(activityId).update(data);
                     return true;
                 } catch (error) {
-                    console.error('Update activity error:', error);
-                    throw error;
+                    debug('Update activity error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.updateActivity(activityId, data);
                 }
             }
             
             // Settings methods
             async saveSettings(settings) {
+                debug('Saving settings', settings);
+                if (this._shouldUseLocalFallback()) {
+                    localFirestore.settings = settings;
+                    localStorage.setItem('wyzwanie2025_settings', JSON.stringify(settings));
+                    return true;
+                }
+                
                 try {
                     await this.db.collection('settings').doc('challenge').set(settings);
                     return true;
                 } catch (error) {
-                    console.error('Save settings error:', error);
-                    throw error;
+                    debug('Save settings error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.saveSettings(settings);
                 }
             }
             
             async getSettings() {
+                debug('Getting settings');
+                if (this._shouldUseLocalFallback()) {
+                    const storedSettings = localStorage.getItem('wyzwanie2025_settings');
+                    if (storedSettings) {
+                        localFirestore.settings = JSON.parse(storedSettings);
+                    }
+                    return localFirestore.settings;
+                }
+                
                 try {
                     const doc = await this.db.collection('settings').doc('challenge').get();
                     if (doc.exists) {
@@ -1590,45 +1820,118 @@ ICB9CiAgXQp9">
                         return null;
                     }
                 } catch (error) {
-                    console.error('Get settings error:', error);
-                    return null;
+                    debug('Get settings error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.getSettings();
                 }
             }
             
-            // Listen for changes in realtime
+            // Listen for changes in realtime - simplified for local fallback
             onParticipantsChange(callback) {
-                return this.db.collection('participants')
-                    .onSnapshot(snapshot => {
-                        const participants = snapshot.docs.map(doc => doc.data());
-                        callback(participants);
-                    }, error => {
-                        console.error('Participants listener error:', error);
-                    });
+                debug('Setting up participants listener');
+                if (this._shouldUseLocalFallback()) {
+                    // For local fallback, we'll just call the callback once with current data
+                    const storedParticipants = localStorage.getItem('wyzwanie2025_participants');
+                    if (storedParticipants) {
+                        localFirestore.participants = JSON.parse(storedParticipants);
+                        callback(localFirestore.participants);
+                    }
+                    // Return a dummy unsubscribe function
+                    return () => {};
+                }
+                
+                try {
+                    return this.db.collection('participants')
+                        .onSnapshot(snapshot => {
+                            const participants = snapshot.docs.map(doc => doc.data());
+                            callback(participants);
+                        }, error => {
+                            debug('Participants listener error, falling back to local:', error);
+                            this.useLocalFallback = true;
+                            return this.onParticipantsChange(callback);
+                        });
+                } catch (error) {
+                    debug('Setting up participants listener error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.onParticipantsChange(callback);
+                }
             }
             
             onActivitiesChange(callback) {
-                return this.db.collection('activities')
-                    .onSnapshot(snapshot => {
-                        const activities = snapshot.docs.map(doc => doc.data());
-                        callback(activities);
-                    }, error => {
-                        console.error('Activities listener error:', error);
-                    });
+                debug('Setting up activities listener');
+                if (this._shouldUseLocalFallback()) {
+                    // For local fallback, we'll just call the callback once with current data
+                    const storedActivities = localStorage.getItem('wyzwanie2025_activities');
+                    if (storedActivities) {
+                        localFirestore.activities = JSON.parse(storedActivities);
+                        callback(localFirestore.activities);
+                    }
+                    // Return a dummy unsubscribe function
+                    return () => {};
+                }
+                
+                try {
+                    return this.db.collection('activities')
+                        .onSnapshot(snapshot => {
+                            const activities = snapshot.docs.map(doc => doc.data());
+                            callback(activities);
+                        }, error => {
+                            debug('Activities listener error, falling back to local:', error);
+                            this.useLocalFallback = true;
+                            return this.onActivitiesChange(callback);
+                        });
+                } catch (error) {
+                    debug('Setting up activities listener error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.onActivitiesChange(callback);
+                }
             }
             
             onSettingsChange(callback) {
-                return this.db.collection('settings').doc('challenge')
-                    .onSnapshot(doc => {
-                        if (doc.exists) {
-                            callback(doc.data());
-                        }
-                    }, error => {
-                        console.error('Settings listener error:', error);
-                    });
+                debug('Setting up settings listener');
+                if (this._shouldUseLocalFallback()) {
+                    // For local fallback, we'll just call the callback once with current data
+                    const storedSettings = localStorage.getItem('wyzwanie2025_settings');
+                    if (storedSettings) {
+                        localFirestore.settings = JSON.parse(storedSettings);
+                        callback(localFirestore.settings);
+                    }
+                    // Return a dummy unsubscribe function
+                    return () => {};
+                }
+                
+                try {
+                    return this.db.collection('settings').doc('challenge')
+                        .onSnapshot(doc => {
+                            if (doc.exists) {
+                                callback(doc.data());
+                            }
+                        }, error => {
+                            debug('Settings listener error, falling back to local:', error);
+                            this.useLocalFallback = true;
+                            return this.onSettingsChange(callback);
+                        });
+                } catch (error) {
+                    debug('Setting up settings listener error, falling back to local:', error);
+                    this.useLocalFallback = true;
+                    return this.onSettingsChange(callback);
+                }
             }
             
             // Clear data (for testing)
             async clearCollection(collectionName) {
+                debug(`Clearing collection ${collectionName}`);
+                if (this._shouldUseLocalFallback()) {
+                    if (collectionName === 'participants') {
+                        localFirestore.participants = [];
+                        localStorage.removeItem('wyzwanie2025_participants');
+                    } else if (collectionName === 'activities') {
+                        localFirestore.activities = [];
+                        localStorage.removeItem('wyzwanie2025_activities');
+                    }
+                    return true;
+                }
+                
                 try {
                     const snapshot = await this.db.collection(collectionName).get();
                     const batch = this.db.batch();
@@ -1640,9 +1943,50 @@ ICB9CiAgXQp9">
                     await batch.commit();
                     return true;
                 } catch (error) {
-                    console.error(`Clear ${collectionName} error:`, error);
-                    return false;
+                    debug(`Clear ${collectionName} error, falling back to local:`, error);
+                    this.useLocalFallback = true;
+                    return this.clearCollection(collectionName);
                 }
+            }
+
+            // Pass-through to app's notification system
+            showNotification(title, message, type) {
+                const notification = document.getElementById('notification');
+                const notificationTitle = notification.querySelector('.notification-title');
+                const notificationText = document.getElementById('notification-text');
+                const notificationIcon = notification.querySelector('.notification-icon i');
+                
+                // Set content
+                notificationTitle.textContent = title;
+                notificationText.textContent = message;
+                
+                // Set icon based on type
+                switch (type) {
+                    case 'success':
+                        notificationIcon.className = 'fa fa-check';
+                        notificationIcon.style.color = '#27ae60';
+                        break;
+                    case 'error':
+                        notificationIcon.className = 'fa fa-times';
+                        notificationIcon.style.color = '#e74c3c';
+                        break;
+                    case 'warning':
+                        notificationIcon.className = 'fa fa-exclamation';
+                        notificationIcon.style.color = '#f39c12';
+                        break;
+                    default: // info
+                        notificationIcon.className = 'fa fa-info-circle';
+                        notificationIcon.style.color = '#3498db';
+                        break;
+                }
+                
+                // Show notification
+                notification.classList.add('visible');
+                
+                // Auto-hide after 5 seconds
+                setTimeout(() => {
+                    notification.classList.remove('visible');
+                }, 5000);
             }
         }
 
@@ -1673,6 +2017,7 @@ ICB9CiAgXQp9">
             }
 
             async init() {
+                debug("App initialization started");
                 // Initialize UI elements
                 this.initUI();
                 
@@ -1697,9 +2042,13 @@ ICB9CiAgXQp9">
                 
                 // Setup realtime listeners
                 this.setupRealtimeListeners();
+                
+                debug("App initialization completed");
+                this.showNotification("Aplikacja gotowa", "Wyzwanie 2025 zostało załadowane pomyślnie.", "success");
             }
 
             initUI() {
+                debug("Initializing UI");
                 // Progress chart
                 this.initChart();
                 
@@ -1723,13 +2072,17 @@ ICB9CiAgXQp9">
                 
                 // Initialize Strava auth redirect URI
                 this.stravaRedirectUri = window.location.href.split('?')[0];
+                
+                debug("UI initialization completed");
             }
 
             async loadStoredSettings() {
+                debug("Loading stored settings");
                 // Try to load settings from Firebase
                 const settings = await this.firebase.getSettings();
                 
                 if (settings) {
+                    debug("Found settings in Firebase/localStorage", settings);
                     // We have settings in Firebase, use them
                     if (settings.startDate) {
                         this.state.challengeStartDate = new Date(settings.startDate);
@@ -1748,6 +2101,7 @@ ICB9CiAgXQp9">
                     document.getElementById('challenge-end').value = this.formatDateForInput(this.state.challengeEndDate);
                     document.getElementById('test-mode').value = this.state.testMode ? '1' : '0';
                 } else {
+                    debug("No settings found, using defaults");
                     // No settings in Firebase, use default values
                     // Save default settings to Firebase
                     await this.firebase.saveSettings({
@@ -1760,11 +2114,15 @@ ICB9CiAgXQp9">
                 // Load Strava tokens from localStorage (temporary storage)
                 const stravaTokens = localStorage.getItem('wyzwanie2025_stravaTokens');
                 if (stravaTokens) {
+                    debug("Found Strava tokens in localStorage");
                     this.state.tokens = JSON.parse(stravaTokens);
                 }
+                
+                debug("Settings loaded");
             }
 
             initChart() {
+                debug("Initializing chart");
                 const ctx = document.getElementById('progress-chart').getContext('2d');
                 
                 // Create empty chart (will be populated later)
@@ -1824,14 +2182,17 @@ ICB9CiAgXQp9">
                         }
                     }
                 });
+                debug("Chart initialized");
             }
 
             async loadData() {
+                debug("Loading app data");
                 // Check for Strava authentication callback
                 const urlParams = new URLSearchParams(window.location.search);
                 const code = urlParams.get('code');
                 
                 if (code) {
+                    debug("Found Strava auth code in URL, processing...");
                     // Show loading
                     this.showLoadingModal("Autoryzacja w Strava... Proszę czekać.");
                     
@@ -1853,31 +2214,21 @@ ICB9CiAgXQp9">
                 // Check for stored user data
                 const storedUser = localStorage.getItem('wyzwanie2025_user');
                 if (storedUser) {
+                    debug("Found stored user data");
                     this.state.user = JSON.parse(storedUser);
                     this.updateJoinButton();
                 }
 
                 // Load participants and activities from Firebase
                 try {
-                    // Show loading indicator
-                    const loadingEl = document.createElement('div');
-                    loadingEl.className = 'loading';
-                    loadingEl.innerHTML = `
-                        <div class="spinner"></div>
-                        <p>Ładowanie danych...</p>
-                    `;
-                    
-                    document.getElementById('participants-grid').innerHTML = '';
-                    document.getElementById('participants-grid').appendChild(loadingEl);
-                    
-                    document.getElementById('activity-list').innerHTML = '';
-                    document.getElementById('activity-list').appendChild(loadingEl.cloneNode(true));
-                    
+                    debug("Loading participants and activities");
                     // Load participants
                     const participants = await this.firebase.getParticipants();
                     if (participants && participants.length > 0) {
+                        debug(`Loaded ${participants.length} participants`);
                         this.state.participants = participants;
                     } else if (this.state.testMode) {
+                        debug("No participants found and test mode is enabled, generating test data");
                         // Generate test data if in test mode and no participants exist
                         this.generateTestData(5);
                     }
@@ -1885,9 +2236,11 @@ ICB9CiAgXQp9">
                     // Load activities
                     const activities = await this.firebase.getActivities();
                     if (activities && activities.length > 0) {
+                        debug(`Loaded ${activities.length} activities`);
                         this.state.activities = activities;
                         this.state.activitiesLoaded = true;
                     } else if (this.state.testMode && this.state.participants.length > 0) {
+                        debug("No activities found and test mode is enabled, generating test activities");
                         // Generate test activities if in test mode and participants exist
                         this.generateTestActivities();
                     }
@@ -1901,7 +2254,7 @@ ICB9CiAgXQp9">
                     this.updateActivitiesList();
                     this.updateProgressChart();
                 } catch (error) {
-                    console.error('Error loading data from Firebase:', error);
+                    debug('Error loading data:', error);
                     this.showNotification("Błąd ładowania", "Nie udało się pobrać danych. Spróbuj odświeżyć stronę.", "error");
                     
                     // Use empty data
@@ -1913,13 +2266,18 @@ ICB9CiAgXQp9">
                 
                 // If user is logged in and we have tokens, fetch activities from Strava
                 if (this.state.user && this.state.tokens) {
+                    debug("User is logged in and has Strava tokens, fetching activities");
                     this.fetchStravaActivities();
                 }
+                
+                debug("Data loading completed");
             }
             
             setupRealtimeListeners() {
+                debug("Setting up realtime listeners");
                 // Listen for changes in participants
                 const participantsUnsubscribe = this.firebase.onParticipantsChange(participants => {
+                    debug(`Received update with ${participants.length} participants`);
                     this.state.participants = participants;
                     this.sortParticipants();
                     this.updateParticipantsList();
@@ -1928,6 +2286,8 @@ ICB9CiAgXQp9">
                 
                 // Listen for changes in activities
                 const activitiesUnsubscribe = this.firebase.onActivitiesChange(activities => {
+                    debug(`Received update with ${activities.length} activities`);
+                    this.state.activities = activities;
                     this.state.activities = activities;
                     this.sortActivities();
                     this.updateActivitiesList();
@@ -1936,6 +2296,7 @@ ICB9CiAgXQp9">
                 
                 // Listen for changes in settings
                 const settingsUnsubscribe = this.firebase.onSettingsChange(settings => {
+                    debug('Received settings update', settings);
                     if (settings.startDate) {
                         this.state.challengeStartDate = new Date(settings.startDate);
                     }
@@ -1959,6 +2320,7 @@ ICB9CiAgXQp9">
                 
                 // Save unsubscribe functions
                 this.state.unsubscribers.push(participantsUnsubscribe, activitiesUnsubscribe, settingsUnsubscribe);
+                debug("Realtime listeners setup complete");
             }
 
             sortParticipants() {
@@ -1970,6 +2332,7 @@ ICB9CiAgXQp9">
             }
 
             updateParticipantsList() {
+                debug("Updating participants list");
                 const container = document.getElementById('participants-grid');
                 container.innerHTML = '';
 
@@ -2003,7 +2366,7 @@ ICB9CiAgXQp9">
                                 </div>
                             </div>
                         </div>
-                        ${streakDays >= 3 ? `<div class="streak-badge"><iclass="fa fa-fire"></i>${streakDays} dni</div>` : ''}
+                        ${streakDays >= 3 ? `<div class="streak-badge"><i class="fa fa-fire"></i>${streakDays} dni</div>` : ''}
                         <div class="participant-stats">
                             <div class="stat-row">
                                 <div class="stat-label">Punkty:</div>
@@ -2039,6 +2402,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Dodaj obsługę kliknięć w awatar i nazwę uczestnika
+                debug("Adding click handlers for participant avatars and names");
                 document.querySelectorAll('.participant-avatar, .participant-name').forEach(element => {
                     element.addEventListener('click', () => {
                         const stravaId = element.dataset.stravaId;
@@ -2047,9 +2411,12 @@ ICB9CiAgXQp9">
                         }
                     });
                 });
+                
+                debug("Participants list updated");
             }
 
             updateActivitiesList() {
+                debug("Updating activities list");
                 const container = document.getElementById('activity-list');
                 const prevBtn = document.getElementById('prev-page');
                 const nextBtn = document.getElementById('next-page');
@@ -2126,6 +2493,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Dodaj obsługę kliknięć w nazwę aktywności
+                debug("Adding click handlers for activity titles");
                 document.querySelectorAll('.activity-title').forEach(element => {
                     element.addEventListener('click', () => {
                         const stravaId = element.dataset.stravaId;
@@ -2136,6 +2504,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Dodaj obsługę kliknięć w nazwę uczestnika
+                debug("Adding click handlers for activity participant names");
                 document.querySelectorAll('.activity-meta .participant-name').forEach(element => {
                     element.addEventListener('click', () => {
                         const stravaId = element.dataset.stravaId;
@@ -2146,15 +2515,19 @@ ICB9CiAgXQp9">
                 });
                 
                 // Add event listeners for high five buttons
+                debug("Adding click handlers for high five buttons");
                 document.querySelectorAll('.high-five-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const activityId = e.currentTarget.dataset.activityId;
                         this.sendHighFive(activityId);
                     });
                 });
+                
+                debug("Activities list updated");
             }
 
             updateProgressChart() {
+                debug("Updating progress chart");
                 // If no participants, clear the chart
                 if (this.state.participants.length === 0) {
                     this.progressChart.data.labels = [];
@@ -2223,9 +2596,11 @@ ICB9CiAgXQp9">
                 this.progressChart.data.labels = labels;
                 this.progressChart.data.datasets = datasets;
                 this.progressChart.update();
+                debug("Progress chart updated");
             }
 
             updateCountdown() {
+                debug("Updating countdown");
                 const countdownEl = document.getElementById('countdown-timer');
                 const now = new Date();
                 
@@ -2249,6 +2624,7 @@ ICB9CiAgXQp9">
             }
 
             updateJoinButton() {
+                debug("Updating join button state");
                 const joinBtn = document.getElementById('join-btn');
                 
                 if (this.state.user) {
@@ -2350,12 +2726,16 @@ ICB9CiAgXQp9">
             }
 
             initEventListeners() {
+                debug("Initializing event listeners");
+                
                 // Join button
+                debug("Adding join button click handler");
                 document.getElementById('join-btn').addEventListener('click', () => {
                     this.openJoinModal();
                 });
                 
                 // Modal close buttons
+                debug("Adding modal close button handlers");
                 document.querySelectorAll('.modal-close').forEach(btn => {
                     btn.addEventListener('click', e => {
                         const modalId = e.target.closest('.modal-overlay').id;
@@ -2364,6 +2744,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Role selection
+                debug("Adding role selection handlers");
                 document.querySelectorAll('.role-card').forEach(card => {
                     card.addEventListener('click', () => {
                         // Remove selected class from all cards
@@ -2378,6 +2759,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Connect Strava button
+                debug("Adding connect Strava button handler");
                 document.getElementById('connect-strava-btn').addEventListener('click', () => {
                     const selectedRole = document.querySelector('.role-card.selected')?.dataset.role;
                     
@@ -2387,6 +2769,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Pagination buttons
+                debug("Adding pagination button handlers");
                 document.getElementById('prev-page').addEventListener('click', () => {
                     if (this.state.currentPage > 0) {
                         this.state.currentPage--;
@@ -2403,17 +2786,20 @@ ICB9CiAgXQp9">
                 });
                 
                 // Admin link
+                debug("Adding admin link handler");
                 document.getElementById('admin-link').addEventListener('click', e => {
                     e.preventDefault();
                     this.openAdminModal();
                 });
                 
                 // Admin login button
+                debug("Adding admin login button handler");
                 document.getElementById('admin-login-btn').addEventListener('click', () => {
                     this.loginAdmin();
                 });
                 
                 // Admin password input (enter key)
+                debug("Adding admin password keyup handler");
                 document.getElementById('admin-password').addEventListener('keyup', e => {
                     if (e.key === 'Enter') {
                         this.loginAdmin();
@@ -2421,38 +2807,45 @@ ICB9CiAgXQp9">
                 });
                 
                 // Save challenge dates button
+                debug("Adding save dates button handler");
                 document.getElementById('save-dates-btn').addEventListener('click', () => {
                     this.saveChallengeSettings();
                 });
                 
                 // Toggle test mode button
+                debug("Adding toggle test mode button handler");
                 document.getElementById('toggle-test-btn').addEventListener('click', () => {
                     this.toggleTestMode();
                 });
                 
                 // Generate test data button
+                debug("Adding generate test data button handler");
                 document.getElementById('generate-data-btn').addEventListener('click', () => {
                     const numUsers = parseInt(document.getElementById('test-users').value) || 5;
                     this.generateTestData(numUsers);
                 });
                 
                 // Reset test data button
+                debug("Adding reset test data button handler");
                 document.getElementById('reset-data-btn').addEventListener('click', () => {
                     this.resetTestData();
                 });
                 
                 // Install button
+                debug("Adding install button handler");
                 document.getElementById('install-btn').addEventListener('click', () => {
                     this.installPWA();
                 });
                 
                 // Close install banner button
+                debug("Adding close install banner button handler");
                 document.getElementById('close-install-btn').addEventListener('click', () => {
                     document.getElementById('install-banner').classList.remove('visible');
                     localStorage.setItem('wyzwanie2025_installBannerClosed', 'true');
                 });
                 
                 // Mobile navigation
+                debug("Adding mobile navigation handlers");
                 document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
                     btn.addEventListener('click', e => {
                         document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
@@ -2461,6 +2854,7 @@ ICB9CiAgXQp9">
                 });
                 
                 // Add click handler to close modals when clicking outside
+                debug("Adding modal overlay click handlers");
                 document.querySelectorAll('.modal-overlay').forEach(overlay => {
                     overlay.addEventListener('click', e => {
                         if (e.target === overlay) {
@@ -2468,9 +2862,12 @@ ICB9CiAgXQp9">
                         }
                     });
                 });
+                
+                debug("Event listeners initialized");
             }
 
             openJoinModal() {
+                debug("Opening join modal");
                 // Reset role selection
                 document.querySelectorAll('.role-card').forEach(card => card.classList.remove('selected'));
                 document.getElementById('connect-strava-btn').disabled = true;
@@ -2480,6 +2877,7 @@ ICB9CiAgXQp9">
             }
 
             openAdminModal() {
+                debug("Opening admin modal");
                 // Reset admin form
                 document.getElementById('admin-password').value = '';
                 document.getElementById('admin-login').style.display = 'block';
@@ -2490,9 +2888,11 @@ ICB9CiAgXQp9">
             }
 
             loginAdmin() {
+                debug("Attempting admin login");
                 const password = document.getElementById('admin-password').value;
                 
                 if (password === this.adminPassword) {
+                    debug("Admin login successful");
                     document.getElementById('admin-login').style.display = 'none';
                     document.getElementById('admin-panel').style.display = 'block';
                     
@@ -2501,15 +2901,18 @@ ICB9CiAgXQp9">
                     document.getElementById('challenge-end').value = this.formatDateForInput(this.state.challengeEndDate);
                     document.getElementById('test-mode').value = this.state.testMode ? '1' : '0';
                 } else {
+                    debug("Admin login failed - incorrect password");
                     this.showNotification("Błąd logowania", "Niepoprawne hasło administratora.", "error");
                 }
             }
 
             async saveChallengeSettings() {
+                debug("Saving challenge settings");
                 const startDate = new Date(document.getElementById('challenge-start').value);
                 const endDate = new Date(document.getElementById('challenge-end').value);
                 
                 if (startDate >= endDate) {
+                    debug("Invalid date range - start date must be before end date");
                     this.showNotification("Błąd ustawień", "Data rozpoczęcia musi być wcześniejsza niż data zakończenia.", "error");
                     return;
                 }
@@ -2519,6 +2922,7 @@ ICB9CiAgXQp9">
                 
                 // Save to Firebase
                 try {
+                    debug("Saving settings to Firebase/localStorage");
                     await this.firebase.saveSettings({
                         startDate: startDate.toISOString(),
                         endDate: endDate.toISOString(),
@@ -2530,17 +2934,19 @@ ICB9CiAgXQp9">
                     
                     this.showNotification("Sukces", "Daty wyzwania zostały zaktualizowane.", "success");
                 } catch (error) {
-                    console.error('Error saving challenge settings:', error);
+                    debug('Error saving challenge settings:', error);
                     this.showNotification("Błąd", "Nie udało się zapisać ustawień. Spróbuj ponownie.", "error");
                 }
             }
 
             async toggleTestMode() {
+                debug("Toggling test mode");
                 const testMode = document.getElementById('test-mode').value === '1';
                 this.state.testMode = testMode;
                 
                 // Save to Firebase
                 try {
+                    debug(`Setting test mode to ${testMode}`);
                     await this.firebase.saveSettings({
                         startDate: this.state.challengeStartDate.toISOString(),
                         endDate: this.state.challengeEndDate.toISOString(),
@@ -2549,6 +2955,7 @@ ICB9CiAgXQp9">
                     
                     if (testMode && !this.state.activitiesLoaded && this.state.participants.length === 0) {
                         // Generate test data if not already loaded
+                        debug("Generating test data since test mode was enabled");
                         const numUsers = parseInt(document.getElementById('test-users').value) || 5;
                         this.generateTestData(numUsers);
                     }
@@ -2559,12 +2966,13 @@ ICB9CiAgXQp9">
                         "info"
                     );
                 } catch (error) {
-                    console.error('Error toggling test mode:', error);
+                    debug('Error toggling test mode:', error);
                     this.showNotification("Błąd", "Nie udało się zmienić trybu testowego.", "error");
                 }
             }
 
             async generateTestData(numUsers = 5) {
+                debug(`Generating test data for ${numUsers} users`);
                 // Show loading modal
                 this.showLoadingModal("Generowanie danych testowych...");
                 
@@ -2607,18 +3015,19 @@ ICB9CiAgXQp9">
                         
                         // Save to Firebase one by one to avoid large batch operations
                         await this.firebase.saveParticipant(participant);
+                        debug(`Created test participant: ${participant.name}`);
                     }
                     
                     this.state.participants = testParticipants;
                     
                     // Generate activities
-                    this.generateTestActivities();
+                    await this.generateTestActivities();
                     
                     // Sorting is done by Firebase listeners
                     
                     this.showNotification("Dane testowe", `Wygenerowano ${numUsers} uczestników testowych z aktywnościami.`, "success");
                 } catch (error) {
-                    console.error('Error generating test data:', error);
+                    debug('Error generating test data:', error);
                     this.showNotification("Błąd", "Nie udało się wygenerować danych testowych.", "error");
                 } finally {
                     this.hideLoadingModal();
@@ -2626,6 +3035,7 @@ ICB9CiAgXQp9">
             }
 
             async generateTestActivities() {
+                debug("Generating test activities");
                 const testActivities = [];
                 const activityNames = [
                     'Poranny trening',
@@ -2651,6 +3061,7 @@ ICB9CiAgXQp9">
                 try {
                     // For each participant
                     for (const participant of this.state.participants) {
+                        debug(`Generating activities for: ${participant.name}`);
                         // Reset points and distances
                         participant.points = 0;
                         participant.runDistance = 0;
@@ -2731,19 +3142,22 @@ ICB9CiAgXQp9">
                         
                         // Save activities in small batches to avoid large operations
                         if (participantActivities.length > 0) {
+                            debug(`Saving ${participantActivities.length} activities for ${participant.name}`);
                             await this.firebase.saveActivities(participantActivities);
                         }
                     }
                     
                     this.state.activities = testActivities;
                     this.state.activitiesLoaded = true;
+                    debug(`Generated ${testActivities.length} test activities in total`);
                 } catch (error) {
-                    console.error('Error generating test activities:', error);
+                    debug('Error generating test activities:', error);
                     throw error;
                 }
             }
 
             async resetTestData(showNotification = true) {
+                debug("Resetting test data");
                 // Show loading modal
                 if (showNotification) {
                     this.showLoadingModal("Resetowanie danych testowych...");
@@ -2763,7 +3177,7 @@ ICB9CiAgXQp9">
                         this.showNotification("Reset danych", "Dane testowe zostały zresetowane.", "info");
                     }
                 } catch (error) {
-                    console.error('Error resetting test data:', error);
+                    debug('Error resetting test data:', error);
                     if (showNotification) {
                         this.showNotification("Błąd", "Nie udało się zresetować danych testowych.", "error");
                     }
@@ -2775,6 +3189,7 @@ ICB9CiAgXQp9">
             }
 
             connectWithStrava(role) {
+                debug(`Connecting with Strava for role: ${role}`);
                 // Store selected role for after authorization
                 localStorage.setItem('wyzwanie2025_pendingRole', role);
                 
@@ -2787,11 +3202,40 @@ ICB9CiAgXQp9">
                 // Redirect to Strava OAuth
                 setTimeout(() => {
                     const authUrl = `https://www.strava.com/oauth/authorize?client_id=${this.stravaClientId}&redirect_uri=${encodeURIComponent(this.stravaRedirectUri)}&response_type=code&scope=read,activity:read`;
-                    window.location.href = authUrl;
+                    
+                    // For test mode, we can skip the actual Strava auth
+                    if (this.state.testMode) {
+                        debug("Test mode: simulating Strava auth callback");
+                        this.hideLoadingModal();
+                        // Generate a fake user with the selected role
+                        const fakeAthleteData = {
+                            id: 12345678,
+                            firstname: 'Jan',
+                            lastname: 'Kowalski',
+                            profile: 'https://i.pravatar.cc/150?img=50'
+                        };
+                        
+                        // Create user and generate activities
+                        this.createUserFromStravaData(fakeAthleteData, role)
+                            .then(() => this.generateMockActivitiesForUser(this.state.user))
+                            .then(() => {
+                                this.showConfetti();
+                                this.showNotification(
+                                    "Gratulacje (tryb testowy)!", 
+                                    "Dołączyłeś do wyzwania w trybie testowym!", 
+                                    "success"
+                                );
+                            });
+                    } else {
+                        // Actual Strava auth
+                        debug("Redirecting to Strava auth URL");
+                        window.location.href = authUrl;
+                    }
                 }, 1000);
             }
 
             async handleStravaCallback(code) {
+                debug("Handling Strava callback");
                 try {
                     // Exchange authorization code for access token
                     const tokenResponse = await this.exchangeCodeForToken(code);
@@ -2836,7 +3280,7 @@ ICB9CiAgXQp9">
                     );
                     
                 } catch (error) {
-                    console.error('Error handling Strava callback:', error);
+                    debug('Error handling Strava callback:', error);
                     this.showNotification(
                         "Błąd integracji", 
                         "Wystąpił problem podczas łączenia ze Strava. Spróbuj ponownie.", 
@@ -2846,10 +3290,12 @@ ICB9CiAgXQp9">
             }
 
             async exchangeCodeForToken(code) {
+                debug("Exchanging code for Strava token");
                 try {
                     // W rzeczywistej aplikacji, ten proces powinien odbywać się po stronie serwera
                     // dla bezpieczeństwa. Jednak dla uproszczenia, robimy to tutaj.
                     if (this.state.testMode) {
+                        debug("Test mode: returning mock tokens");
                         // W trybie testowym symulujemy odpowiedź
                         return {
                             access_token: 'mock_access_token',
@@ -2878,10 +3324,11 @@ ICB9CiAgXQp9">
                     
                     return await response.json();
                 } catch (error) {
-                    console.error('Error exchanging code for token:', error);
+                    debug('Error exchanging code for token:', error);
                     
                     // W trybie testowym zwracamy symulowane dane
                     if (this.state.testMode) {
+                        debug("Falling back to mock tokens after error");
                         return {
                             access_token: 'mock_access_token',
                             refresh_token: 'mock_refresh_token',
@@ -2893,6 +3340,7 @@ ICB9CiAgXQp9">
             }
 
             async fetchStravaAthleteData() {
+                debug("Fetching Strava athlete data");
                 try {
                     // Check if we have a valid token
                     if (!this.state.tokens || !this.state.tokens.accessToken) {
@@ -2901,6 +3349,7 @@ ICB9CiAgXQp9">
                     
                     // In test mode, return mock data
                     if (this.state.testMode) {
+                        debug("Test mode: returning mock athlete data");
                         return {
                             id: 12345678,
                             firstname: 'Jan',
@@ -2922,10 +3371,11 @@ ICB9CiAgXQp9">
                     
                     return await response.json();
                 } catch (error) {
-                    console.error('Error fetching athlete data:', error);
+                    debug('Error fetching athlete data:', error);
                     
                     // For demo purposes in test mode
                     if (this.state.testMode) {
+                        debug("Falling back to mock athlete data after error");
                         return {
                             id: 12345678,
                             firstname: 'Jan',
@@ -2938,6 +3388,7 @@ ICB9CiAgXQp9">
             }
 
             async createUserFromStravaData(athleteData, role) {
+                debug(`Creating user from Strava data, role: ${role}`, athleteData);
                 // Create user from Strava data
                 const user = {
                     id: `strava-${athleteData.id}`,
@@ -2963,8 +3414,9 @@ ICB9CiAgXQp9">
                     // Sign in anonymously for demo purposes
                     // In a real app, we would use custom auth
                     await this.firebase.signInAnonymously();
+                    debug("Firebase anonymous sign-in successful");
                 } catch (error) {
-                    console.error('Error creating auth token:', error);
+                    debug('Error creating auth token:', error);
                 }
                 
                 // Add to participants if not already present
@@ -2972,17 +3424,22 @@ ICB9CiAgXQp9">
                 if (!existingParticipant) {
                     // Add to Firebase
                     await this.firebase.saveParticipant(user);
+                    debug("Added new participant to Firebase/localStorage");
                     
                     // Add to local state
                     this.state.participants.push(user);
                     this.sortParticipants();
+                } else {
+                    debug("User already exists as a participant");
                 }
                 
                 // Update UI
                 this.updateJoinButton();
+                debug("User created successfully");
             }
 
             async fetchStravaActivities() {
+                debug("Fetching Strava activities");
                 try {
                     // Check if we have a valid token
                     if (!this.state.tokens || !this.state.tokens.accessToken) {
@@ -2991,6 +3448,7 @@ ICB9CiAgXQp9">
                     
                     // Check if token is expired
                     if (this.state.tokens.expiresAt * 1000 < Date.now()) {
+                        debug("Token expired, refreshing");
                         await this.refreshStravaToken();
                     }
                     
@@ -2998,6 +3456,7 @@ ICB9CiAgXQp9">
                     
                     // In test mode, generate mock activities
                     if (this.state.testMode && this.state.user) {
+                        debug("Test mode: generating mock activities");
                         await this.generateMockActivitiesForUser(this.state.user);
                         this.hideLoadingModal();
                         return;
@@ -3008,6 +3467,7 @@ ICB9CiAgXQp9">
                     const before = Math.floor(this.state.challengeEndDate.getTime() / 1000);
                     
                     // Fetch activities from Strava API
+                    debug("Making request to Strava API");
                     const response = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&before=${before}&per_page=100`, {
                         headers: {
                             'Authorization': `Bearer ${this.state.tokens.accessToken}`
@@ -3019,6 +3479,7 @@ ICB9CiAgXQp9">
                     }
                     
                     const stravaActivities = await response.json();
+                    debug(`Received ${stravaActivities.length} activities from Strava`);
                     
                     // Process Strava activities
                     await this.processStravaActivities(stravaActivities);
@@ -3026,11 +3487,12 @@ ICB9CiAgXQp9">
                     this.hideLoadingModal();
                     
                 } catch (error) {
-                    console.error('Error fetching Strava activities:', error);
+                    debug('Error fetching Strava activities:', error);
                     this.hideLoadingModal();
                     
                     // For demo purposes in test mode
                     if (this.state.testMode && this.state.user) {
+                        debug("Falling back to mock activities after error");
                         await this.generateMockActivitiesForUser(this.state.user);
                     } else {
                         this.showNotification(
@@ -3043,9 +3505,11 @@ ICB9CiAgXQp9">
             }
 
             async refreshStravaToken() {
+                debug("Refreshing Strava token");
                 try {
                     // In test mode, simulate a refreshed token
                     if (this.state.testMode) {
+                        debug("Test mode: simulating token refresh");
                         this.state.tokens = {
                             accessToken: 'refreshed_mock_access_token',
                             refreshToken: 'refreshed_mock_refresh_token',
@@ -3084,15 +3548,21 @@ ICB9CiAgXQp9">
                     };
                     
                     localStorage.setItem('wyzwanie2025_stravaTokens', JSON.stringify(this.state.tokens));
+                    debug("Token refreshed successfully");
                     
                 } catch (error) {
-                    console.error('Error refreshing Strava token:', error);
+                    debug('Error refreshing Strava token:', error);
                     throw error;
                 }
             }
 
             async processStravaActivities(stravaActivities) {
-                if (!this.state.user) return;
+                if (!this.state.user) {
+                    debug("No user, cannot process activities");
+                    return;
+                }
+                
+                debug(`Processing ${stravaActivities.length} Strava activities`);
                 
                 // Reset user stats
                 this.state.user.points = 0;
@@ -3136,6 +3606,8 @@ ICB9CiAgXQp9">
                     }
                 }
                 
+                debug(`Created ${newActivities.length} new activity objects`);
+                
                 // Update user in participants list and Firebase
                 const userIndex = this.state.participants.findIndex(p => p.id === this.state.user.id);
                 if (userIndex >= 0) {
@@ -3151,21 +3623,31 @@ ICB9CiAgXQp9">
                     
                     // Update localStorage
                     localStorage.setItem('wyzwanie2025_user', JSON.stringify(this.state.user));
+                    
+                    debug("Updated user stats");
                 }
                 
                 // Save new activities to Firebase
                 if (newActivities.length > 0) {
+                    debug("Saving new activities to Firebase/localStorage");
                     await this.firebase.saveActivities(newActivities);
                 }
                 
                 // Update local activities
                 this.state.activities = [...existingActivitiesForOtherUsers, ...newActivities];
                 this.sortActivities();
+                
+                debug("Strava activities processed successfully");
             }
 
             async generateMockActivitiesForUser(user) {
                 // For demo/test mode only
-                if (!user) return;
+                if (!user) {
+                    debug("No user, cannot generate mock activities");
+                    return;
+                }
+                
+                debug(`Generating mock activities for user: ${user.name}`);
                 
                 // Reset user stats
                 user.points = 0;
@@ -3256,6 +3738,8 @@ ICB9CiAgXQp9">
                     }
                 }
                 
+                debug(`Generated ${newActivities.length} mock activities`);
+                
                 // Update user in participants list and Firebase
                 const userIndex = this.state.participants.findIndex(p => p.id === user.id);
                 if (userIndex >= 0) {
@@ -3271,10 +3755,13 @@ ICB9CiAgXQp9">
                     
                     // Update localStorage
                     localStorage.setItem('wyzwanie2025_user', JSON.stringify(user));
+                    
+                    debug("Updated user stats");
                 }
                 
                 // Save new activities to Firebase
                 if (newActivities.length > 0) {
+                    debug("Saving mock activities to Firebase/localStorage");
                     await this.firebase.saveActivities(newActivities);
                 }
                 
@@ -3287,9 +3774,12 @@ ICB9CiAgXQp9">
                     "Wygenerowano przykładowe aktywności dla Twojego konta.", 
                     "info"
                 );
+                
+                debug("Mock activities generation complete");
             }
 
             async sendHighFive(activityId) {
+                debug(`Sending high five for activity ${activityId}`);
                 // Find activity
                 const activityIndex = this.state.activities.findIndex(a => a.id === activityId);
                 
@@ -3302,32 +3792,44 @@ ICB9CiAgXQp9">
                     this.state.activities[activityIndex] = activity;
                     
                     // Update in Firebase
-                    await this.firebase.updateActivity(activity.id, {
-                        highFives: activity.highFives
-                    });
-                    
-                    // Find participant
-                    const participant = this.state.participants.find(p => p.id === activity.participantId);
-                    
-                    // Show notification
-                    this.showNotification(
-                        "Wysłano piątkę!", 
-                        `Wysłałeś piątkę dla aktywności "${activity.name}" użytkownika ${participant.name}.`, 
-                        "success"
-                    );
+                    try {
+                        await this.firebase.updateActivity(activity.id, {
+                            highFives: activity.highFives
+                        });
+                        
+                        // Find participant
+                        const participant = this.state.participants.find(p => p.id === activity.participantId);
+                        
+                        // Show notification
+                        this.showNotification(
+                            "Wysłano piątkę!", 
+                            `Wysłałeś piątkę dla aktywności "${activity.name}" użytkownika ${participant.name}.`, 
+                            "success"
+                        );
+                        
+                        debug("High five sent successfully");
+                    } catch (error) {
+                        debug('Error sending high five:', error);
+                        this.showNotification("Błąd", "Nie udało się wysłać piątki. Spróbuj ponownie.", "error");
+                    }
+                } else {
+                    debug("Activity not found");
                 }
             }
 
             showLoadingModal(message) {
+                debug(`Showing loading modal: ${message}`);
                 document.getElementById('loading-message').textContent = message;
                 document.getElementById('loading-modal').classList.add('visible');
             }
 
             hideLoadingModal() {
+                debug("Hiding loading modal");
                 document.getElementById('loading-modal').classList.remove('visible');
             }
 
             showNotification(title, message, type = 'info') {
+                debug(`Showing notification: ${title}`, { message, type });
                 const notification = document.getElementById('notification');
                 const notificationTitle = notification.querySelector('.notification-title');
                 const notificationText = document.getElementById('notification-text');
@@ -3367,6 +3869,7 @@ ICB9CiAgXQp9">
             }
 
             showConfetti() {
+                debug("Showing confetti animation");
                 const container = document.getElementById('confetti-container');
                 container.innerHTML = '';
                 
@@ -3402,6 +3905,7 @@ ICB9CiAgXQp9">
             }
 
             initServiceWorker() {
+                debug("Initializing service worker");
                 if ('serviceWorker' in navigator) {
                     // Register service worker from inline script
                     const swCode = `
@@ -3448,21 +3952,26 @@ ICB9CiAgXQp9">
                     // Register the service worker
                     navigator.serviceWorker.register(swUrl)
                         .then((registration) => {
-                            console.log('Service Worker registered with scope:', registration.scope);
+                            debug('Service Worker registered with scope:', registration.scope);
                         })
                         .catch((error) => {
-                            console.error('Service Worker registration failed:', error);
+                            debug('Service Worker registration failed:', error);
                         });
+                } else {
+                    debug("Service Worker API not available in this browser");
                 }
             }
 
             setupPWA() {
+                debug("Setting up PWA installation");
                 // Listen for beforeinstallprompt event
                 window.addEventListener('beforeinstallprompt', (e) => {
                     // Prevent Chrome from automatically showing the prompt
                     e.preventDefault();
                     // Stash the event so it can be triggered later
                     this.state.deferredPrompt = e;
+                    
+                    debug("PWA install prompt detected and deferred");
                     
                     // Show the install banner if not previously closed
                     const bannerClosed = localStorage.getItem('wyzwanie2025_installBannerClosed');
@@ -3478,11 +3987,12 @@ ICB9CiAgXQp9">
                     // Clear the deferredPrompt
                     this.state.deferredPrompt = null;
                     // Log the installation
-                    console.log('PWA was installed');
+                    debug("PWA was installed");
                 });
             }
 
             installPWA() {
+                debug("Installing PWA");
                 if (this.state.deferredPrompt) {
                     // Show the install prompt
                     this.state.deferredPrompt.prompt();
@@ -3490,49 +4000,42 @@ ICB9CiAgXQp9">
                     // Wait for the user to respond to the prompt
                     this.state.deferredPrompt.userChoice.then((choiceResult) => {
                         if (choiceResult.outcome === 'accepted') {
-                            console.log('User accepted the install prompt');
+                            debug("User accepted the install prompt");
                         } else {
-                            console.log('User dismissed the install prompt');
+                            debug("User dismissed the install prompt");
                         }
                         // Clear the deferredPrompt
                         this.state.deferredPrompt = null;
                     });
+                } else {
+                    debug("No deferred prompt available, cannot install");
                 }
             }
         }
 
         // Initialize the app when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
-            const app = new WyzwanieApp();
+            try {
+                debug("DOM loaded, initializing app");
+                const app = new WyzwanieApp();
+            } catch (error) {
+                console.error("Error initializing app:", error);
+                debug("Critical error during app initialization:", error);
+                
+                // Show error notification
+                const notification = document.getElementById('notification');
+                const notificationTitle = notification.querySelector('.notification-title');
+                const notificationText = document.getElementById('notification-text');
+                const notificationIcon = notification.querySelector('.notification-icon i');
+                
+                notificationTitle.textContent = "Błąd inicjalizacji";
+                notificationText.textContent = "Wystąpił problem podczas ładowania aplikacji. Odśwież stronę lub spróbuj ponownie później.";
+                notificationIcon.className = 'fa fa-bug';
+                notificationIcon.style.color = '#e74c3c';
+                
+                notification.classList.add('visible');
+            }
         });
     </script>
-    <script>
-// Podstawowa obsługa przycisków
-document.addEventListener('DOMContentLoaded', function() {
-    // Join button
-    const joinBtn = document.getElementById('join-btn');
-    if (joinBtn) {
-        joinBtn.onclick = function() {
-            document.getElementById('join-modal').classList.add('visible');
-        };
-    }
-    
-    // Admin link
-    const adminLink = document.getElementById('admin-link');
-    if (adminLink) {
-        adminLink.onclick = function(e) {
-            e.preventDefault();
-            document.getElementById('admin-modal').classList.add('visible');
-        };
-    }
-    
-    // Close buttons
-    document.querySelectorAll('.modal-close').forEach(function(button) {
-        button.onclick = function() {
-            this.closest('.modal-overlay').classList.remove('visible');
-        };
-    });
-});
-</script>
 </body>
 </html>
