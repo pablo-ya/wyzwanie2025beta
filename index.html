@@ -3506,5 +3506,33 @@ ICB9CiAgXQp9">
             const app = new WyzwanieApp();
         });
     </script>
+    <script>
+// Podstawowa obsługa przycisków
+document.addEventListener('DOMContentLoaded', function() {
+    // Join button
+    const joinBtn = document.getElementById('join-btn');
+    if (joinBtn) {
+        joinBtn.onclick = function() {
+            document.getElementById('join-modal').classList.add('visible');
+        };
+    }
+    
+    // Admin link
+    const adminLink = document.getElementById('admin-link');
+    if (adminLink) {
+        adminLink.onclick = function(e) {
+            e.preventDefault();
+            document.getElementById('admin-modal').classList.add('visible');
+        };
+    }
+    
+    // Close buttons
+    document.querySelectorAll('.modal-close').forEach(function(button) {
+        button.onclick = function() {
+            this.closest('.modal-overlay').classList.remove('visible');
+        };
+    });
+});
+</script>
 </body>
 </html>
