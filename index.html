@@ -2017,36 +2017,41 @@ ICB9CiAgXQp9">
             }
 
             async init() {
-                debug("App initialization started");
-                // Initialize UI elements
-                this.initUI();
-                
-                // Load stored settings and challenge dates
-                await this.loadStoredSettings();
-                
-                // Load data
-                await this.loadData();
-                
-                // Initialize event listeners
-                this.initEventListeners();
-                
-                // Initialize service worker
-                this.initServiceWorker();
-                
-                // Setup PWA installation
-                this.setupPWA();
-                
-                // Update countdown
-                this.updateCountdown();
-                setInterval(() => this.updateCountdown(), 1000 * 60); // Update every minute
-                
-                // Setup realtime listeners
-                this.setupRealtimeListeners();
-                
-                debug("App initialization completed");
-                this.showNotification("Aplikacja gotowa", "Wyzwanie 2025 zostało załadowane pomyślnie.", "success");
-            }
-
+    debug("App initialization started");
+    
+    try {
+        // Initialize UI elements
+        this.initUI();
+        
+        // Initialize event listeners PRZED ładowaniem danych
+        this.initEventListeners();
+        
+        // Load stored settings and challenge dates
+        await this.loadStoredSettings();
+        
+        // Load data
+        await this.loadData();
+        
+        // Initialize service worker
+        this.initServiceWorker();
+        
+        // Setup PWA installation
+        this.setupPWA();
+        
+        // Update countdown
+        this.updateCountdown();
+        setInterval(() => this.updateCountdown(), 1000 * 60); // Update every minute
+        
+        // Setup realtime listeners
+        this.setupRealtimeListeners();
+        
+        debug("App initialization completed");
+        this.showNotification("Aplikacja gotowa", "Wyzwanie 2025 zostało załadowane pomyślnie.", "success");
+    } catch (error) {
+        debug("ERROR during app initialization:", error);
+        this.showNotification("Błąd inicjalizacji", "Wystąpił problem podczas inicjalizacji aplikacji. Sprawdź konsolę.", "error");
+    }
+}
             initUI() {
                 debug("Initializing UI");
                 // Progress chart
