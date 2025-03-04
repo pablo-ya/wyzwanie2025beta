@@ -2037,6 +2037,29 @@
             try {
                 console.log('Pobieranie rzeczywistych aktywności z API Strava...');
                 
+                // Sprawdź i odśwież token jeśli wygasł
+                const tokenExpiry = localStorage.getItem('tokenExpiry');
+                const now = new Date().getTime();
+                
+                if (tokenExpiry && parseInt(tokenExpiry) < now) {
+                    console.log('Token Strava wygasł, próba odświeżenia...');
+                    const refreshSuccessful = await refreshStravaToken();
+                    
+                    if (!refreshSuccessful) {
+                        console.error('Nie udało się odświeżyć tokenu Strava!');
+                        alert('Twój token dostępowy Strava wygasł i nie udało się go odnowić. Konieczne jest ponowne połączenie z kontem Strava.');
+                        localStorage.removeItem('stravaToken');
+                        localStorage.removeItem('refreshToken');
+                        localStorage.removeItem('tokenExpiry');
+                        
+                        // Pokazuje przycisk do ponownego połączenia
+                        if (confirm('Twój token dostępowy Strava wygasł. Czy chcesz ponownie połączyć swoje konto Strava?')) {
+                            window.location.reload();
+                        }
+                        return [];
+                    }
+                }
+                
                 // Pobieraj aktywności TYLKO od daty rozpoczęcia wyzwania
                 const startTime = challengeParams.startDate.getTime() / 1000;
                 
@@ -2048,7 +2071,7 @@
                 
                 const response = await fetch(activitiesUrl, {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
+                        'Authorization': `Bearer ${localStorage.getItem('stravaToken')}`, // Pobierz najnowszy token
                         'Origin': window.location.origin
                     }
                 });
@@ -2057,9 +2080,25 @@
                     const errorText = await response.text();
                     console.error('Problem z pobieraniem aktywności Strava:', errorText);
                     
+                    // Jeśli mamy błąd 401 (Unauthorized), token jest nieprawidłowy mimo próby odświeżenia
+                    if (response.status === 401) {
+                        console.error('Token Strava jest nieprawidłowy!');
+                        alert('Twój token dostępowy Strava jest nieprawidłowy. Konieczne jest ponowne połączenie z kontem Strava.');
+                        localStorage.removeItem('stravaToken');
+                        localStorage.removeItem('refreshToken');
+                        localStorage.removeItem('tokenExpiry');
+                        
+                        // Pokazuje przycisk do ponownego połączenia
+                        if (confirm('Twój token dostępowy Strava jest nieprawidłowy. Czy chcesz ponownie połączyć swoje konto Strava?')) {
+                            window.location.reload();
+                        }
+                        return [];
+                    }
+                    
                     // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
                     if (response.status === 403) {
                         alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
+                        window.open('https://cors-anywhere.herokuapp.com/corsdemo', '_blank');
                         // Dla prawdziwych użytkowników NIE generujemy testowych danych
                         return [];
                     }
@@ -2456,20 +2495,92 @@
             });
         }
         
-        function syncParticipantActivities(athleteId) {
+        // Sync participant activities
+        async function syncParticipantActivities(athleteId) {
+            console.log(`Synchronizuję aktywności dla uczestnika o ID: ${athleteId}`);
             const participant = participants.find(p => p.id === athleteId);
-            if (!participant) return;
+            if (!participant) {
+                alert('Nie znaleziono uczestnika!');
+                return;
+            }
             
-            alert(`Synchronizacja aktywności dla ${participant.name}...`);
+            // Jeśli to testowy użytkownik, generuj testowe dane
+            if (athleteId.toString().startsWith('test_')) {
+                console.log('Generowanie testowych aktywności dla testowego użytkownika...');
+                return await addTestActivitiesForTestUser(athleteId, participant.role);
+            }
             
-            // In a real app, this would fetch new activities from Strava
-            // Here we'll simulate by adding a few random activities
-            fetchStravaActivities().then(stravaActivities => {
-                addActivities(athleteId, stravaActivities, participant.role).then(() => {
-                    alert('Synchronizacja zakończona!');
-                    loadData();
+            alert(`Rozpoczynam synchronizację aktywności dla ${participant.name}...`);
+            
+            try {
+                // Sprawdź, czy mamy token dla tego uczestnika
+                let token = null;
+                if (localStorage.getItem('athleteId') === athleteId) {
+                    // To aktualnie zalogowany uczestnik
+                    token = localStorage.getItem('stravaToken');
+                }
+                
+                if (!token) {
+                    alert(`Brak tokenu dostępowego dla ${participant.name}. Tylko aktualnie zalogowany użytkownik może synchronizować swoje aktywności.`);
+                    return;
+                }
+                
+                // Sprawdź, czy token nie wygasł
+                const tokenExpiry = localStorage.getItem('tokenExpiry');
+                const now = new Date().getTime();
+                
+                if (tokenExpiry && parseInt(tokenExpiry) < now) {
+                    console.log('Token wygasł, próba odświeżenia...');
+                    const refreshSuccessful = await refreshStravaToken();
+                    
+                    if (!refreshSuccessful) {
+                        alert('Twój token dostępowy wygasł i nie udało się go odnowić. Konieczne jest ponowne połączenie z kontem Strava.');
+                        return;
+                    }
+                }
+                
+                // Pobierz aktywności ze Stravy
+                const stravaActivities = await fetchStravaActivities();
+                
+                if (!stravaActivities || stravaActivities.length === 0) {
+                    alert('Nie znaleziono nowych aktywności do synchronizacji.');
+                    return;
+                }
+                
+                // Pobierz istniejące aktywności z Firebase
+                const existingActivitiesSnapshot = await db.collection('activities')
+                    .where('athleteId', '==', athleteId)
+                    .get();
+                
+                const existingActivityIds = new Set();
+                existingActivitiesSnapshot.docs.forEach(doc => {
+                    existingActivityIds.add(doc.id);
                 });
-            });
+                
+                // Znajdź nowe aktywności
+                const newActivities = stravaActivities.filter(activity => 
+                    !existingActivityIds.has(activity.id.toString())
+                );
+                
+                console.log(`Znaleziono ${newActivities.length} nowych aktywności do dodania.`);
+                
+                if (newActivities.length === 0) {
+                    alert('Wszystkie aktywności są już zsynchronizowane. Nie znaleziono nowych aktywności.');
+                    return;
+                }
+                
+                // Dodaj nowe aktywności
+                await addActivities(athleteId, newActivities, participant.role);
+                
+                // Odśwież dane
+                await loadData();
+                
+                alert(`Synchronizacja zakończona! Dodano ${newActivities.length} nowych aktywności.`);
+                
+            } catch (error) {
+                console.error('Błąd podczas synchronizacji aktywności:', error);
+                alert(`Wystąpił błąd podczas synchronizacji: ${error.message}`);
+            }
         }
         
         function deleteParticipant(athleteId) {
