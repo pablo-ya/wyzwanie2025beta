@@ -1924,8 +1924,8 @@
                     console.warn('Używanie symulowanych danych, ponieważ nie skonfigurowano CLIENT_ID i CLIENT_SECRET');
                     // Symulowane dane dla celów demonstracyjnych
                     return {
-                        access_token: 'fake_access_token_' + Date.now(),
-                        refresh_token: 'fake_refresh_token_' + Date.now(),
+                        access_token: 'simulated_access_token_' + Date.now(),
+                        refresh_token: 'simulated_refresh_token_' + Date.now(),
                         expires_in: 21600,
                         athlete: {
                             id: 'user_' + Math.floor(Math.random() * 1000000),
@@ -1936,15 +1936,21 @@
                     };
                 }
                 
-                // Użyj proxy CORS aby ominąć ograniczenia CORS
-                // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
-                const tokenUrl = 'https://cors-anywhere.herokuapp.com/https://www.strava.com/oauth/token';
+                // WAŻNE: TESTOWA IMPLEMENTACJA BEZ PROXY - Bezpośrednie połączenie
+                console.log("Próba bezpośredniego połączenia z API Strava dla wymiany tokenu...");
+                const tokenUrl = `https://www.strava.com/oauth/token`;
+                
+                console.log("Dane zapytania:", {
+                    client_id: STRAVA_CLIENT_ID,
+                    client_secret: "[ukryte dla bezpieczeństwa]",
+                    code: code,
+                    grant_type: 'authorization_code'
+                });
                 
                 const response = await fetch(tokenUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Origin': window.location.origin
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         client_id: STRAVA_CLIENT_ID,
@@ -1954,25 +1960,49 @@
                     })
                 });
                 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Problem z odpowiedzią Strava:', errorText);
-                    
-                    // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
-                    if (response.status === 403) {
-                        throw new Error('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
-                    }
-                    
-                    throw new Error(`Problem z wymianą kodu na token: ${response.status} ${response.statusText}`);
-                }
+                const responseStatus = `${response.status} ${response.statusText}`;
+                const responseText = await response.text();
+                console.log("Odpowiedź API Strava:", responseStatus);
+                console.log("Treść odpowiedzi:", responseText);
                 
-                const data = await response.json();
-                console.log('Otrzymano odpowiedź z tokenem Strava:', data);
-                return data;
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    console.log('SUKCES! Otrzymano token z API Strava:', {
+                        access_token_prefix: data.access_token ? data.access_token.substring(0, 10) + '...' : 'brak',
+                        token_type: data.token_type,
+                        expires_in: data.expires_in,
+                        athlete: data.athlete ? { 
+                            id: data.athlete.id,
+                            firstname: data.athlete.firstname,
+                            lastname: data.athlete.lastname
+                        } : 'brak'
+                    });
+                    return data;
+                } else {
+                    // Jeśli nie udało się bezpośrednio, to możemy spróbować przez proxy
+                    throw new Error(`Problem z wymianą kodu na token: ${responseStatus}. Odpowiedź: ${responseText}`);
+                }
                 
             } catch (error) {
                 console.error('Błąd podczas wymiany kodu na token:', error);
-                throw error;
+                
+                if (confirm('Wystąpił błąd podczas łączenia ze Strava API. Czy chcesz użyć danych demonstracyjnych?\n\nSzczegóły błędu: ' + error.message)) {
+                    // Symulowane dane dla celów demonstracyjnych
+                    console.warn('Używanie symulowanych danych po błędzie');
+                    return {
+                        access_token: 'simulated_error_token_' + Date.now(),
+                        refresh_token: 'simulated_error_refresh_' + Date.now(),
+                        expires_in: 21600,
+                        athlete: {
+                            id: 'demo_' + Math.floor(Math.random() * 1000000),
+                            firstname: 'Demo',
+                            lastname: 'User (po błędzie)',
+                            profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
+                        }
+                    };
+                } else {
+                    throw error; // Jeśli użytkownik nie chce danych demonstracyjnych, rzuć błąd dalej
+                }
             }
         }
         
