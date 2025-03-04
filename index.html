@@ -2110,7 +2110,11 @@
                 
                 // Ustal zakres dat - pobierz aktywności od początku wyzwania lub z ostatnich 12 miesięcy (pełna historia)
                 const now = new Date();
-               
+                const oneYearAgo = new Date(now);
+                oneYearAgo.setFullYear(now.getFullYear() - 1); // Pobierz aktywności z ostatniego roku
+                
+                // Nie używamy daty rozpoczęcia wyzwania, aby pobrać pełną historię
+                const startTime = startDate;
                 
                 console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toLocaleDateString()}`);
                 
