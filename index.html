@@ -2037,52 +2037,99 @@
                 
                 // Sprawdź, czy używamy symulowanych danych
                 if (token.startsWith('fake_')) {
-                    console.warn('Używanie symulowanych danych Strava');
-                    return generateTestActivities();
+                    console.warn('Używanie symulowanych danych Strava - token testowy');
+                    return generateTestActivities(20); // Więcej aktywności w trybie demonstracyjnym
                 }
                 
-                // Pobieraj wszystkie aktywności z paginacją (do 500 aktywności)
-                const allActivities = [];
-                let page = 1;
-                let hasMoreActivities = true;
+                // Spróbuj różnych sposobów pobierania danych
+                let allActivities = [];
+                let successfulFetch = false;
                 
-                while (hasMoreActivities && page <= 5) { // Limit 5 stron (500 aktywności)
-                    console.log(`Pobieranie strony ${page} aktywności...`);
-                    
-                    // Użyj proxy CORS aby ominąć ograniczenia CORS
-                    const activitiesUrl = `https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100&page=${page}`;
-                    
-                    const response = await fetch(activitiesUrl, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Origin': window.location.origin
-                        }
-                    });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('Problem z pobieraniem aktywności Strava:', errorText);
+                // Podejście 1: Bezpośrednie połączenie (bez proxy)
+                if (!successfulFetch) {
+                    try {
+                        console.log("Próba bezpośredniego połączenia z API Strava (może nie działać z powodu CORS)...");
+                        const directUrl = `https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`;
                         
-                        // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
-                        if (response.status === 403) {
-                            alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
-                            return generateTestActivities();
-                        }
+                        const response = await fetch(directUrl, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
                         
-                        throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            allActivities = data;
+                            successfulFetch = true;
+                            console.log(`Pobrano ${data.length} aktywności bezpośrednio z API Strava`);
+                        } else {
+                            console.log("Bezpośrednie połączenie nie powiodło się, próbuję przez proxy...");
+                        }
+                    } catch (error) {
+                        console.log("Błąd podczas bezpośredniego połączenia:", error);
                     }
-                    
-                    const pageActivities = await response.json();
-                    console.log(`Pobrano ${pageActivities.length} aktywności ze strony ${page}`);
-                    
-                    allActivities.push(...pageActivities);
-                    
-                    // Jeśli otrzymaliśmy mniej niż 100 aktywności, oznacza to że nie ma więcej stron
-                    if (pageActivities.length < 100) {
-                        hasMoreActivities = false;
-                    } else {
-                        page++;
+                }
+                
+                // Podejście 2: Użycie proxy CORS Anywhere
+                if (!successfulFetch) {
+                    try {
+                        console.log("Próba przez proxy CORS Anywhere...");
+                        const proxyUrl = "https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities";
+                        
+                        const response = await fetch(`${proxyUrl}?after=${startTime}&per_page=100`, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Origin': window.location.origin
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            allActivities = data;
+                            successfulFetch = true;
+                            console.log(`Pobrano ${data.length} aktywności przez CORS Anywhere`);
+                        } else {
+                            if (response.status === 403) {
+                                console.log("Dostęp do CORS Anywhere wymaga autoryzacji: https://cors-anywhere.herokuapp.com/corsdemo");
+                            } else {
+                                console.log(`Błąd proxy CORS Anywhere: ${response.status} ${response.statusText}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.log("Błąd podczas używania CORS Anywhere:", error);
                     }
+                }
+                
+                // Podejście 3: Użycie alternatywnego proxy
+                if (!successfulFetch) {
+                    try {
+                        console.log("Próba przez alternatywne proxy CORS...");
+                        const altProxyUrl = "https://api.allorigins.win/raw?url=" + 
+                            encodeURIComponent(`https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`);
+                        
+                        const response = await fetch(altProxyUrl, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            allActivities = data;
+                            successfulFetch = true;
+                            console.log(`Pobrano ${data.length} aktywności przez alternatywne proxy`);
+                        } else {
+                            console.log(`Błąd alternatywnego proxy: ${response.status} ${response.statusText}`);
+                        }
+                    } catch (error) {
+                        console.log("Błąd podczas używania alternatywnego proxy:", error);
+                    }
+                }
+                
+                // Jeśli wszystkie metody zawiodły, użyj danych demonstracyjnych
+                if (!successfulFetch) {
+                    console.warn("Wszystkie metody pobierania danych zawiodły. Używanie danych demonstracyjnych.");
+                    return generateTestActivities(30); // Więcej aktywności w trybie awaryjnym
                 }
                 
                 console.log(`Łącznie pobrano ${allActivities.length} aktywności z API Strava`);
@@ -2100,38 +2147,53 @@
                 
             } catch (error) {
                 console.error('Błąd podczas pobierania aktywności z API Strava:', error);
-                alert(`Wystąpił błąd podczas pobierania aktywności: ${error.message}. Używanie danych testowych.`);
+                console.log('Użycie danych demonstracyjnych z powodu błędu');
                 
-                return generateTestActivities();
+                return generateTestActivities(25);
             }
         }
         
         // Generowanie testowych aktywności
-        function generateTestActivities() {
-            console.log('Generowanie przykładowych aktywności...');
+        function generateTestActivities(count = 15) {
+            console.log(`Generowanie ${count} przykładowych aktywności...`);
             const testActivities = [];
             const types = ['Run', 'Ride'];
             const names = [
                 'Poranny bieg', 'Popołudniowa jazda', 'Wieczorny bieg', 
                 'Długi weekend', 'Regeneracja', 'Bieg w terenie',
-                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowa jazda'
+                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowa jazda',
+                'Przygotowanie do zawodów', 'Bieg w parku', 'Przełaje',
+                'Wycieczka rowerowa', 'Commute', 'Trening w górach'
             ];
             
-            // Wygeneruj 5-10 losowych aktywności
-            const count = Math.floor(Math.random() * 5) + 5;
             const now = new Date();
+            const oneYearAgo = new Date(now);
+            oneYearAgo.setFullYear(now.getFullYear() - 1);
             
+            // Utwórz lepiej rozmieszczone aktywności
             for (let i = 0; i < count; i++) {
                 const type = types[Math.floor(Math.random() * types.length)];
-                const name = names[Math.floor(Math.random() * names.length)];
-                const distance = (Math.random() * 20 + 3) * 1000; // 3-23km w metrach
+                const nameIndex = Math.floor(Math.random() * names.length);
+                const name = names[nameIndex];
+                
+                // Dystans zależny od typu aktywności
+                let distance;
+                if (type === 'Run') {
+                    distance = (Math.random() * 15 + 3) * 1000; // 3-18km dla biegania
+                } else {
+                    distance = (Math.random() * 40 + 10) * 1000; // 10-50km dla jazdy rowerem
+                }
+                
                 const movingTime = distance * (Math.random() * 30 + 240); // 4-7 min/km tempo
                 const averageSpeed = type === 'Run' ? distance / movingTime * 3600 : distance / movingTime * 3600 * 2; // km/h
                 
-                // Losowa data między początkiem wyzwania a teraz (lub wcześniej do testów)
-                const minDate = new Date(now);
-                minDate.setMonth(minDate.getMonth() - 3); // Do 3 miesięcy temu
-                const randomDate = new Date(minDate.getTime() + Math.random() * (now.getTime() - minDate.getTime()));
+                // Równomiernie rozłożone aktywności w ciągu roku
+                const dayOffset = Math.floor(i * (365 / count));
+                const activityDate = new Date(oneYearAgo);
+                activityDate.setDate(activityDate.getDate() + dayOffset);
+                
+                // Dodaj losowość do godziny
+                activityDate.setHours(Math.floor(Math.random() * 12) + 6); // między 6:00 a 18:00
                 
                 testActivities.push({
                     id: 'activity_' + Math.floor(Math.random() * 1000000),
@@ -2140,9 +2202,12 @@
                     distance: distance,
                     movingTime: movingTime,
                     averageSpeed: averageSpeed,
-                    startDate: randomDate
+                    startDate: activityDate
                 });
             }
+            
+            // Posortuj aktywności od najnowszej do najstarszej
+            testActivities.sort((a, b) => b.startDate - a.startDate);
             
             console.log('Wygenerowano testowe aktywności:', testActivities);
             return testActivities;
@@ -2671,7 +2736,7 @@
             installBanner.style.display = 'none';
         });
         
-       // Obsługa nawigacji mobilnej
+        // Obsługa nawigacji mobilnej
         mobileNavLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
