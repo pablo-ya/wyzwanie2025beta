@@ -2025,17 +2025,15 @@
             try {
                 console.log('Pobieranie aktywności z API Strava...');
                 
-                // Ustal zakres dat - pobierz aktywności od początku wyzwania lub z ostatnich 3 miesięcy
+                // Ustal zakres dat - pobierz aktywności od początku wyzwania lub z ostatnich 12 miesięcy (pełna historia)
                 const now = new Date();
-                const threeMonthsAgo = new Date(now);
-                threeMonthsAgo.setMonth(now.getMonth() - 3);
+                const oneYearAgo = new Date(now);
+                oneYearAgo.setFullYear(now.getFullYear() - 1); // Pobierz aktywności z ostatniego roku
                 
-                const startTime = Math.max(
-                    threeMonthsAgo.getTime() / 1000,
-                    challengeParams.startDate.getTime() / 1000
-                );
+                // Nie używamy daty rozpoczęcia wyzwania, aby pobrać pełną historię
+                const startTime = Math.floor(oneYearAgo.getTime() / 1000);
                 
-                console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toISOString()}`);
+                console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toLocaleDateString()}`);
                 
                 // Sprawdź, czy używamy symulowanych danych
                 if (token.startsWith('fake_')) {
@@ -2043,35 +2041,54 @@
                     return generateTestActivities();
                 }
                 
-                // Użyj proxy CORS aby ominąć ograniczenia CORS
-                // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
-                const activitiesUrl = `https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`;
+                // Pobieraj wszystkie aktywności z paginacją (do 500 aktywności)
+                const allActivities = [];
+                let page = 1;
+                let hasMoreActivities = true;
                 
-                const response = await fetch(activitiesUrl, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Origin': window.location.origin
-                    }
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Problem z pobieraniem aktywności Strava:', errorText);
+                while (hasMoreActivities && page <= 5) { // Limit 5 stron (500 aktywności)
+                    console.log(`Pobieranie strony ${page} aktywności...`);
                     
-                    // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
-                    if (response.status === 403) {
-                        alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
-                        return generateTestActivities();
+                    // Użyj proxy CORS aby ominąć ograniczenia CORS
+                    const activitiesUrl = `https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100&page=${page}`;
+                    
+                    const response = await fetch(activitiesUrl, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Origin': window.location.origin
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Problem z pobieraniem aktywności Strava:', errorText);
+                        
+                        // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
+                        if (response.status === 403) {
+                            alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
+                            return generateTestActivities();
+                        }
+                        
+                        throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
                     }
                     
-                    throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
+                    const pageActivities = await response.json();
+                    console.log(`Pobrano ${pageActivities.length} aktywności ze strony ${page}`);
+                    
+                    allActivities.push(...pageActivities);
+                    
+                    // Jeśli otrzymaliśmy mniej niż 100 aktywności, oznacza to że nie ma więcej stron
+                    if (pageActivities.length < 100) {
+                        hasMoreActivities = false;
+                    } else {
+                        page++;
+                    }
                 }
                 
-                const activities = await response.json();
-                console.log(`Pobrano ${activities.length} aktywności z API Strava:`, activities);
+                console.log(`Łącznie pobrano ${allActivities.length} aktywności z API Strava`);
                 
                 // Przetwórz odpowiedź na format używany w aplikacji
-                return activities.map(a => ({
+                return allActivities.map(a => ({
                     id: a.id.toString(),
                     name: a.name,
                     type: a.type,
@@ -2137,12 +2154,25 @@
                 console.log(`Dodawanie aktywności dla uczestnika ${athleteId} z rolą ${role}...`);
                 console.log('Aktywności do dodania:', stravaActivities);
                 
+                // Najpierw pobierz istniejące aktywności dla tego uczestnika
+                const existingActivitiesSnapshot = await db.collection('activities')
+                    .where('athleteId', '==', athleteId)
+                    .get();
+                
+                const existingActivityIds = new Set();
+                existingActivitiesSnapshot.forEach(doc => {
+                    existingActivityIds.add(doc.id);
+                });
+                
+                console.log(`Znaleziono ${existingActivityIds.size} istniejących aktywności w bazie danych.`);
+                
                 // Filter activities based on challenge dates and role
                 const eligibleActivities = stravaActivities.filter(activity => {
                     const activityDate = new Date(activity.startDate);
                     const isInDateRange = activityDate >= challengeParams.startDate && 
                                          activityDate <= challengeParams.endDate;
                     const isEligibleType = isActivityEligible(activity, role);
+                    const isNewActivity = !existingActivityIds.has(activity.id);
                     
                     // Log why activities might be filtered out
                     if (!isInDateRange) {
@@ -2151,14 +2181,17 @@
                     if (!isEligibleType) {
                         console.log(`Aktywność ${activity.id} odrzucona - nieodpowiedni typ: ${activity.type} dla roli ${role}`);
                     }
+                    if (!isNewActivity) {
+                        console.log(`Aktywność ${activity.id} już istnieje w bazie danych`);
+                    }
                     
-                    return isInDateRange && isEligibleType;
+                    return isInDateRange && isEligibleType && isNewActivity;
                 });
                 
-                console.log(`Znaleziono ${eligibleActivities.length} aktywności kwalifikujących się do wyzwania.`);
+                console.log(`Znaleziono ${eligibleActivities.length} nowych aktywności kwalifikujących się do wyzwania.`);
                 
                 if (eligibleActivities.length === 0) {
-                    alert('Nie znaleziono aktywności kwalifikujących się do wyzwania. Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.');
+                    alert('Nie znaleziono nowych aktywności kwalifikujących się do wyzwania. Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.');
                     return;
                 }
                 
@@ -2638,7 +2671,7 @@
             installBanner.style.display = 'none';
         });
         
-        // Obsługa nawigacji mobilnej
+       // Obsługa nawigacji mobilnej
         mobileNavLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
