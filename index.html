@@ -2302,6 +2302,28 @@
                 console.log(`Dodawanie aktywności dla uczestnika ${athleteId} z rolą ${role}...`);
                 console.log('Aktywności do dodania:', stravaActivities);
                 
+                // Bezwzględnie weryfikujemy parametry wyzwania
+                const paramsDoc = await db.collection('challengeParams').doc('main').get();
+                if (!paramsDoc.exists) {
+                    console.error('BŁĄD: Brak parametrów wyzwania w Firebase!');
+                    alert('Błąd: Brak parametrów wyzwania w Firebase. Skontaktuj się z administratorem.');
+                    return false;
+                }
+                
+                // Pobierz daty wyzwania
+                const params = paramsDoc.data();
+                const startDate = params.startDate.toDate();
+                const endDate = params.endDate.toDate();
+                
+                // Zaktualizuj globalne parametry
+                challengeParams = {
+                    startDate: startDate,
+                    endDate: endDate,
+                    pointGoal: params.pointGoal
+                };
+                
+                console.log(`WAŻNE: Dodawanie aktywności TYLKO z okresu wyzwania: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`);
+                
                 // Sprawdź, czy to użytkownik testowy
                 const isTestUser = athleteId && (
                     athleteId.startsWith('test_') ||
@@ -2321,12 +2343,18 @@
                 
                 console.log(`Znaleziono ${existingActivityIds.size} istniejących aktywności w bazie danych.`);
                 
-                // Ponieważ aktywności są już przefiltrowane przez datę w fetchStravaActivities, 
-                // teraz filtrujemy tylko po typie i duplikatach
+                // PONOWNA WERYFIKACJA: sprawdzamy daty każdej aktywności, aby upewnić się,
+                // że są w zakresie dat wyzwania, NAWET JEŚLI już były filtrowane wcześniej
                 const eligibleActivities = stravaActivities.filter(activity => {
+                    const activityDate = new Date(activity.startDate);
+                    const isInDateRange = activityDate >= startDate && activityDate <= endDate;
                     const isEligibleType = isActivityEligible(activity, role);
                     const isNewActivity = !existingActivityIds.has(activity.id);
                     
+                    // Szczegółowe logowanie dla każdej aktywności
+                    if (!isInDateRange) {
+                        console.warn(`UWAGA: Aktywność ${activity.id} (${activity.name}, ${activityDate.toLocaleDateString()}) odrzucona - poza zakresem wyzwania: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`);
+                    }
                     if (!isEligibleType) {
                         console.log(`Aktywność ${activity.id} (${activity.name}, ${activity.type}) odrzucona - nieodpowiedni typ dla roli ${role}`);
                     }
@@ -2334,7 +2362,8 @@
                         console.log(`Aktywność ${activity.id} (${activity.name}) już istnieje w bazie danych`);
                     }
                     
-                    return isEligibleType && isNewActivity;
+                    // Wszystkie warunki muszą być spełnione!
+                    return isInDateRange && isEligibleType && isNewActivity;
                 });
                 
                 console.log(`Znaleziono ${eligibleActivities.length} nowych aktywności kwalifikujących się do wyzwania.`);
@@ -2347,7 +2376,8 @@
                     } else {
                         // Dla prawdziwych użytkowników wyświetlamy komunikat
                         alert('Nie znaleziono nowych aktywności kwalifikujących się do wyzwania. ' +
-                              'Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.');
+                              'Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania: ' + 
+                              startDate.toLocaleDateString() + ' - ' + endDate.toLocaleDateString());
                         return false;
                     }
                 }
