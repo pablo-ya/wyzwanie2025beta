@@ -1669,7 +1669,36 @@
                     startDateInput.value = challengeParams.startDate.toISOString().split('T')[0];
                     endDateInput.value = challengeParams.endDate.toISOString().split('T')[0];
                     pointGoalInput.value = challengeParams.pointGoal;
+                } else {
+                    console.warn('Nie znaleziono parametrów wyzwania, tworzenie domyślnych...');
+                    // Ustaw domyślne parametry wyzwania na rok 2024 (bieżący rok)
+                    const currentYear = new Date().getFullYear();
+                    const defaultStartDate = new Date(`${currentYear}-01-01T00:00:00`);
+                    const defaultEndDate = new Date(`${currentYear}-12-31T23:59:59`);
+                    
+                    await db.collection('challengeParams').doc('main').set({
+                        startDate: firebase.firestore.Timestamp.fromDate(defaultStartDate),
+                        endDate: firebase.firestore.Timestamp.fromDate(defaultEndDate),
+                        pointGoal: 2000
+                    });
+                    
+                    challengeParams = {
+                        startDate: defaultStartDate,
+                        endDate: defaultEndDate,
+                        pointGoal: 2000
+                    };
+                    
+                    // Update inputs in admin panel
+                    startDateInput.value = challengeParams.startDate.toISOString().split('T')[0];
+                    endDateInput.value = challengeParams.endDate.toISOString().split('T')[0];
+                    pointGoalInput.value = challengeParams.pointGoal;
                 }
+                
+                console.log('Załadowane parametry wyzwania:', {
+                    startDate: challengeParams.startDate.toLocaleDateString(),
+                    endDate: challengeParams.endDate.toLocaleDateString(),
+                    pointGoal: challengeParams.pointGoal
+                });
                 
                 // Load participants
                 const participantsSnapshot = await db.collection('participants').get();
@@ -1950,6 +1979,7 @@
         // Add participant to Firebase
         async function addParticipant(athlete, role) {
             try {
+                console.log('Dodawanie uczestnika:', athlete, 'z rolą:', role);
                 const athleteId = athlete.id.toString();
                 const participantRef = db.collection('participants').doc(athleteId);
                 
@@ -1958,6 +1988,7 @@
                 if (doc.exists) {
                     alert('Już uczestniczysz w wyzwaniu!');
                     joinModal.style.display = 'none';
+                    window.location.reload(); // Odśwież stronę aby pokazać dane
                     return;
                 }
                 
@@ -1970,6 +2001,28 @@
                     totalDistance: 0,
                     joinDate: firebase.firestore.FieldValue.serverTimestamp()
                 });
+                
+                // Pobierz lub utwórz parametry wyzwania, jeśli nie istnieją
+                const paramsDoc = await db.collection('challengeParams').doc('main').get();
+                if (!paramsDoc.exists) {
+                    console.log('Tworzenie domyślnych parametrów wyzwania...');
+                    // Ustaw domyślne parametry wyzwania na rok 2024 (bieżący rok)
+                    const currentYear = new Date().getFullYear();
+                    const defaultStartDate = new Date(`${currentYear}-01-01T00:00:00`);
+                    const defaultEndDate = new Date(`${currentYear}-12-31T23:59:59`);
+                    
+                    await db.collection('challengeParams').doc('main').set({
+                        startDate: firebase.firestore.Timestamp.fromDate(defaultStartDate),
+                        endDate: firebase.firestore.Timestamp.fromDate(defaultEndDate),
+                        pointGoal: 2000
+                    });
+                    
+                    challengeParams = {
+                        startDate: defaultStartDate,
+                        endDate: defaultEndDate,
+                        pointGoal: 2000
+                    };
+                }
                 
                 // Fetch activities from Strava (simulated)
                 fetchStravaActivities().then(stravaActivities => {
@@ -1998,7 +2051,7 @@
                 connectingStravaDiv.innerHTML = `
                     <div class="error-message">
                         <i class="fas fa-exclamation-circle"></i>
-                        <p>Wystąpił błąd podczas dołączania do wyzwania. Spróbuj ponownie.</p>
+                        <p>Wystąpił błąd podczas dołączania do wyzwania: ${error.message}</p>
                     </div>
                     <button class="connect-btn" id="retry-join-btn">
                         <i class="fas fa-redo"></i> Spróbuj ponownie
@@ -2219,6 +2272,28 @@
                 console.log(`Dodawanie aktywności dla uczestnika ${athleteId} z rolą ${role}...`);
                 console.log('Aktywności do dodania:', stravaActivities);
                 
+                // Pobierz parametry wyzwania - sprawdź czy istnieją
+                const paramsDoc = await db.collection('challengeParams').doc('main').get();
+                if (!paramsDoc.exists) {
+                    console.warn('Nie znaleziono parametrów wyzwania, używanie domyślnych wartości');
+                    
+                    // Ustaw domyślne parametry wyzwania na rok 2024 (bieżący rok)
+                    const currentYear = new Date().getFullYear();
+                    challengeParams = {
+                        startDate: new Date(`${currentYear}-01-01T00:00:00`),
+                        endDate: new Date(`${currentYear}-12-31T23:59:59`),
+                        pointGoal: 2000
+                    };
+                } else {
+                    console.log('Pobrano parametry wyzwania:', paramsDoc.data());
+                }
+                
+                // Wyświetl informacje o datach wyzwania
+                console.log('Daty wyzwania:', {
+                    startDate: challengeParams.startDate.toLocaleDateString(),
+                    endDate: challengeParams.endDate.toLocaleDateString()
+                });
+                
                 // Najpierw pobierz istniejące aktywności dla tego uczestnika
                 const existingActivitiesSnapshot = await db.collection('activities')
                     .where('athleteId', '==', athleteId)
@@ -2231,6 +2306,15 @@
                 
                 console.log(`Znaleziono ${existingActivityIds.size} istniejących aktywności w bazie danych.`);
                 
+                // Sprawdź daty aktywności - ile aktywności mieści się w okresie wyzwania
+                const activitiesInDateRange = stravaActivities.filter(activity => {
+                    const activityDate = new Date(activity.startDate);
+                    return activityDate >= challengeParams.startDate && 
+                           activityDate <= challengeParams.endDate;
+                });
+                
+                console.log(`Aktywności w zakresie dat wyzwania: ${activitiesInDateRange.length} z ${stravaActivities.length}`);
+                
                 // Filter activities based on challenge dates and role
                 const eligibleActivities = stravaActivities.filter(activity => {
                     const activityDate = new Date(activity.startDate);
@@ -2241,13 +2325,13 @@
                     
                     // Log why activities might be filtered out
                     if (!isInDateRange) {
-                        console.log(`Aktywność ${activity.id} odrzucona - poza zakresem dat: ${activityDate}`);
+                        console.log(`Aktywność ${activity.id} (${activity.name}, ${activityDate.toLocaleDateString()}) odrzucona - poza zakresem dat: ${challengeParams.startDate.toLocaleDateString()} - ${challengeParams.endDate.toLocaleDateString()}`);
                     }
                     if (!isEligibleType) {
-                        console.log(`Aktywność ${activity.id} odrzucona - nieodpowiedni typ: ${activity.type} dla roli ${role}`);
+                        console.log(`Aktywność ${activity.id} (${activity.name}, ${activity.type}) odrzucona - nieodpowiedni typ dla roli ${role}`);
                     }
                     if (!isNewActivity) {
-                        console.log(`Aktywność ${activity.id} już istnieje w bazie danych`);
+                        console.log(`Aktywność ${activity.id} (${activity.name}) już istnieje w bazie danych`);
                     }
                     
                     return isInDateRange && isEligibleType && isNewActivity;
@@ -2256,7 +2340,27 @@
                 console.log(`Znaleziono ${eligibleActivities.length} nowych aktywności kwalifikujących się do wyzwania.`);
                 
                 if (eligibleActivities.length === 0) {
-                    alert('Nie znaleziono nowych aktywności kwalifikujących się do wyzwania. Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.');
+                    // Wyświetl bardziej pomocny komunikat
+                    let message = 'Nie znaleziono nowych aktywności kwalifikujących się do wyzwania.\n\n';
+                    message += `Okres wyzwania: ${challengeParams.startDate.toLocaleDateString()} - ${challengeParams.endDate.toLocaleDateString()}\n`;
+                    message += `Liczba wszystkich pobranych aktywności: ${stravaActivities.length}\n`;
+                    message += `Aktywności w okresie wyzwania: ${activitiesInDateRange.length}\n`;
+                    message += `Aktywności już dodane: ${existingActivityIds.size}\n\n`;
+                    
+                    if (activitiesInDateRange.length === 0) {
+                        message += 'Upewnij się, że masz aktywności w okresie trwania wyzwania.';
+                    } else if (existingActivityIds.size > 0) {
+                        message += 'Twoje aktywności zostały już wcześniej dodane do wyzwania.';
+                    } else {
+                        message += 'Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.';
+                    }
+                    
+                    // Pozwól administratorowi zmodyfikować daty wyzwania
+                    if (localStorage.getItem('isAdmin')) {
+                        message += '\n\nMożesz zmodyfikować daty wyzwania w panelu administratora.';
+                    }
+                    
+                    alert(message);
                     return;
                 }
                 
