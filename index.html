@@ -1113,7 +1113,7 @@
     
     <script>
         // Firebase Configuration
-       const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyCxOfhKBNyIzhkkkiHOhXd3x3mfSUMS6M4",
   authDomain: "wyzwanie2025-a6298.firebaseapp.com",
   projectId: "wyzwanie2025-a6298",
@@ -1669,36 +1669,7 @@
                     startDateInput.value = challengeParams.startDate.toISOString().split('T')[0];
                     endDateInput.value = challengeParams.endDate.toISOString().split('T')[0];
                     pointGoalInput.value = challengeParams.pointGoal;
-                } else {
-                    console.warn('Nie znaleziono parametrów wyzwania, tworzenie domyślnych...');
-                    // Ustaw domyślne parametry wyzwania na rok 2024 (bieżący rok)
-                    const currentYear = new Date().getFullYear();
-                    const defaultStartDate = new Date(`${currentYear}-01-01T00:00:00`);
-                    const defaultEndDate = new Date(`${currentYear}-12-31T23:59:59`);
-                    
-                    await db.collection('challengeParams').doc('main').set({
-                        startDate: firebase.firestore.Timestamp.fromDate(defaultStartDate),
-                        endDate: firebase.firestore.Timestamp.fromDate(defaultEndDate),
-                        pointGoal: 2000
-                    });
-                    
-                    challengeParams = {
-                        startDate: defaultStartDate,
-                        endDate: defaultEndDate,
-                        pointGoal: 2000
-                    };
-                    
-                    // Update inputs in admin panel
-                    startDateInput.value = challengeParams.startDate.toISOString().split('T')[0];
-                    endDateInput.value = challengeParams.endDate.toISOString().split('T')[0];
-                    pointGoalInput.value = challengeParams.pointGoal;
                 }
-                
-                console.log('Załadowane parametry wyzwania:', {
-                    startDate: challengeParams.startDate.toLocaleDateString(),
-                    endDate: challengeParams.endDate.toLocaleDateString(),
-                    pointGoal: challengeParams.pointGoal
-                });
                 
                 // Load participants
                 const participantsSnapshot = await db.collection('participants').get();
@@ -1924,8 +1895,8 @@
                     console.warn('Używanie symulowanych danych, ponieważ nie skonfigurowano CLIENT_ID i CLIENT_SECRET');
                     // Symulowane dane dla celów demonstracyjnych
                     return {
-                        access_token: 'simulated_access_token_' + Date.now(),
-                        refresh_token: 'simulated_refresh_token_' + Date.now(),
+                        access_token: 'fake_access_token_' + Date.now(),
+                        refresh_token: 'fake_refresh_token_' + Date.now(),
                         expires_in: 21600,
                         athlete: {
                             id: 'user_' + Math.floor(Math.random() * 1000000),
@@ -1936,21 +1907,15 @@
                     };
                 }
                 
-                // WAŻNE: TESTOWA IMPLEMENTACJA BEZ PROXY - Bezpośrednie połączenie
-                console.log("Próba bezpośredniego połączenia z API Strava dla wymiany tokenu...");
-                const tokenUrl = `https://www.strava.com/oauth/token`;
-                
-                console.log("Dane zapytania:", {
-                    client_id: STRAVA_CLIENT_ID,
-                    client_secret: "[ukryte dla bezpieczeństwa]",
-                    code: code,
-                    grant_type: 'authorization_code'
-                });
+                // Użyj proxy CORS aby ominąć ograniczenia CORS
+                // Upewnij się, że najpierw autoryzowałeś się na: https://cors-anywhere.herokuapp.com/corsdemo
+                const tokenUrl = 'https://cors-anywhere.herokuapp.com/https://www.strava.com/oauth/token';
                 
                 const response = await fetch(tokenUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
                     },
                     body: JSON.stringify({
                         client_id: STRAVA_CLIENT_ID,
@@ -1960,56 +1925,31 @@
                     })
                 });
                 
-                const responseStatus = `${response.status} ${response.statusText}`;
-                const responseText = await response.text();
-                console.log("Odpowiedź API Strava:", responseStatus);
-                console.log("Treść odpowiedzi:", responseText);
-                
-                if (response.ok) {
-                    const data = JSON.parse(responseText);
-                    console.log('SUKCES! Otrzymano token z API Strava:', {
-                        access_token_prefix: data.access_token ? data.access_token.substring(0, 10) + '...' : 'brak',
-                        token_type: data.token_type,
-                        expires_in: data.expires_in,
-                        athlete: data.athlete ? { 
-                            id: data.athlete.id,
-                            firstname: data.athlete.firstname,
-                            lastname: data.athlete.lastname
-                        } : 'brak'
-                    });
-                    return data;
-                } else {
-                    // Jeśli nie udało się bezpośrednio, to możemy spróbować przez proxy
-                    throw new Error(`Problem z wymianą kodu na token: ${responseStatus}. Odpowiedź: ${responseText}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Problem z odpowiedzią Strava:', errorText);
+                    
+                    // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
+                    if (response.status === 403) {
+                        throw new Error('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
+                    }
+                    
+                    throw new Error(`Problem z wymianą kodu na token: ${response.status} ${response.statusText}`);
                 }
+                
+                const data = await response.json();
+                console.log('Otrzymano odpowiedź z tokenem Strava:', data);
+                return data;
                 
             } catch (error) {
                 console.error('Błąd podczas wymiany kodu na token:', error);
-                
-                if (confirm('Wystąpił błąd podczas łączenia ze Strava API. Czy chcesz użyć danych demonstracyjnych?\n\nSzczegóły błędu: ' + error.message)) {
-                    // Symulowane dane dla celów demonstracyjnych
-                    console.warn('Używanie symulowanych danych po błędzie');
-                    return {
-                        access_token: 'simulated_error_token_' + Date.now(),
-                        refresh_token: 'simulated_error_refresh_' + Date.now(),
-                        expires_in: 21600,
-                        athlete: {
-                            id: 'demo_' + Math.floor(Math.random() * 1000000),
-                            firstname: 'Demo',
-                            lastname: 'User (po błędzie)',
-                            profile: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
-                        }
-                    };
-                } else {
-                    throw error; // Jeśli użytkownik nie chce danych demonstracyjnych, rzuć błąd dalej
-                }
+                throw error;
             }
         }
         
         // Add participant to Firebase
         async function addParticipant(athlete, role) {
             try {
-                console.log('Dodawanie uczestnika:', athlete, 'z rolą:', role);
                 const athleteId = athlete.id.toString();
                 const participantRef = db.collection('participants').doc(athleteId);
                 
@@ -2018,7 +1958,6 @@
                 if (doc.exists) {
                     alert('Już uczestniczysz w wyzwaniu!');
                     joinModal.style.display = 'none';
-                    window.location.reload(); // Odśwież stronę aby pokazać dane
                     return;
                 }
                 
@@ -2031,28 +1970,6 @@
                     totalDistance: 0,
                     joinDate: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                
-                // Pobierz lub utwórz parametry wyzwania, jeśli nie istnieją
-                const paramsDoc = await db.collection('challengeParams').doc('main').get();
-                if (!paramsDoc.exists) {
-                    console.log('Tworzenie domyślnych parametrów wyzwania...');
-                    // Ustaw domyślne parametry wyzwania na rok 2024 (bieżący rok)
-                    const currentYear = new Date().getFullYear();
-                    const defaultStartDate = new Date(`${currentYear}-01-01T00:00:00`);
-                    const defaultEndDate = new Date(`${currentYear}-12-31T23:59:59`);
-                    
-                    await db.collection('challengeParams').doc('main').set({
-                        startDate: firebase.firestore.Timestamp.fromDate(defaultStartDate),
-                        endDate: firebase.firestore.Timestamp.fromDate(defaultEndDate),
-                        pointGoal: 2000
-                    });
-                    
-                    challengeParams = {
-                        startDate: defaultStartDate,
-                        endDate: defaultEndDate,
-                        pointGoal: 2000
-                    };
-                }
                 
                 // Fetch activities from Strava (simulated)
                 fetchStravaActivities().then(stravaActivities => {
@@ -2081,7 +1998,7 @@
                 connectingStravaDiv.innerHTML = `
                     <div class="error-message">
                         <i class="fas fa-exclamation-circle"></i>
-                        <p>Wystąpił błąd podczas dołączania do wyzwania: ${error.message}</p>
+                        <p>Wystąpił błąd podczas dołączania do wyzwania. Spróbuj ponownie.</p>
                     </div>
                     <button class="connect-btn" id="retry-join-btn">
                         <i class="fas fa-redo"></i> Spróbuj ponownie
@@ -2100,125 +2017,61 @@
         // Fetch activities from Strava API
         async function fetchStravaActivities() {
             const token = localStorage.getItem('stravaToken');
+            const athleteId = localStorage.getItem('athleteId');
+            
             if (!token) {
                 console.error('Brak tokenu Strava!');
                 return [];
             }
             
+            // Sprawdź, czy to testowy użytkownik
+            const isTestUser = athleteId && athleteId.toString().startsWith('test_');
+            console.log('Czy testowy użytkownik:', isTestUser);
+            
+            // Dla testowych użytkowników generujemy testowe dane
+            if (isTestUser || token.startsWith('fake_')) {
+                console.log('Generowanie testowych aktywności dla testowego użytkownika');
+                return generateTestActivities();
+            }
+            
             try {
-                console.log('Pobieranie aktywności z API Strava...');
+                console.log('Pobieranie rzeczywistych aktywności z API Strava...');
                 
-                // Ustal zakres dat - pobierz aktywności od początku wyzwania lub z ostatnich 12 miesięcy (pełna historia)
-                const now = new Date();
-                const oneYearAgo = new Date(now);
-                oneYearAgo.setFullYear(now.getFullYear() - 1); // Pobierz aktywności z ostatniego roku
+                // Pobieraj aktywności TYLKO od daty rozpoczęcia wyzwania
+                const startTime = challengeParams.startDate.getTime() / 1000;
                 
-                // Nie używamy daty rozpoczęcia wyzwania, aby pobrać pełną historię
-                const startTime = startDate;
+                console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toISOString()} (data rozpoczęcia wyzwania)`);
                 
-                console.log(`Pobieranie aktywności od ${new Date(startTime * 1000).toLocaleDateString()}`);
+                // Użyj proxy CORS aby ominąć ograniczenia CORS
+                // Pobieramy maksymalnie 200 aktywności
+                const activitiesUrl = `https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=200`;
                 
-                // Sprawdź, czy używamy symulowanych danych
-                if (token.startsWith('fake_')) {
-                    console.warn('Używanie symulowanych danych Strava - token testowy');
-                    return generateTestActivities(20); // Więcej aktywności w trybie demonstracyjnym
-                }
-                
-                // Spróbuj różnych sposobów pobierania danych
-                let allActivities = [];
-                let successfulFetch = false;
-                
-                // Podejście 1: Bezpośrednie połączenie (bez proxy)
-                if (!successfulFetch) {
-                    try {
-                        console.log("Próba bezpośredniego połączenia z API Strava (może nie działać z powodu CORS)...");
-                        const directUrl = `https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`;
-                        
-                        const response = await fetch(directUrl, {
-                            headers: {
-                                'Authorization': `Bearer ${token}`
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            allActivities = data;
-                            successfulFetch = true;
-                            console.log(`Pobrano ${data.length} aktywności bezpośrednio z API Strava`);
-                        } else {
-                            console.log("Bezpośrednie połączenie nie powiodło się, próbuję przez proxy...");
-                        }
-                    } catch (error) {
-                        console.log("Błąd podczas bezpośredniego połączenia:", error);
+                const response = await fetch(activitiesUrl, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Origin': window.location.origin
                     }
-                }
+                });
                 
-                // Podejście 2: Użycie proxy CORS Anywhere
-                if (!successfulFetch) {
-                    try {
-                        console.log("Próba przez proxy CORS Anywhere...");
-                        const proxyUrl = "https://cors-anywhere.herokuapp.com/https://www.strava.com/api/v3/athlete/activities";
-                        
-                        const response = await fetch(`${proxyUrl}?after=${startTime}&per_page=100`, {
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Origin': window.location.origin
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            allActivities = data;
-                            successfulFetch = true;
-                            console.log(`Pobrano ${data.length} aktywności przez CORS Anywhere`);
-                        } else {
-                            if (response.status === 403) {
-                                console.log("Dostęp do CORS Anywhere wymaga autoryzacji: https://cors-anywhere.herokuapp.com/corsdemo");
-                            } else {
-                                console.log(`Błąd proxy CORS Anywhere: ${response.status} ${response.statusText}`);
-                            }
-                        }
-                    } catch (error) {
-                        console.log("Błąd podczas używania CORS Anywhere:", error);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Problem z pobieraniem aktywności Strava:', errorText);
+                    
+                    // Jeśli mamy błąd 403, prawdopodobnie CORS Anywhere wymaga autoryzacji
+                    if (response.status === 403) {
+                        alert('Wymagana autoryzacja proxy CORS. Otwórz https://cors-anywhere.herokuapp.com/corsdemo i kliknij "Request temporary access"');
+                        // Dla prawdziwych użytkowników NIE generujemy testowych danych
+                        return [];
                     }
+                    
+                    throw new Error(`Problem z API Strava: ${response.status} ${response.statusText}`);
                 }
                 
-                // Podejście 3: Użycie alternatywnego proxy
-                if (!successfulFetch) {
-                    try {
-                        console.log("Próba przez alternatywne proxy CORS...");
-                        const altProxyUrl = "https://api.allorigins.win/raw?url=" + 
-                            encodeURIComponent(`https://www.strava.com/api/v3/athlete/activities?after=${startTime}&per_page=100`);
-                        
-                        const response = await fetch(altProxyUrl, {
-                            headers: {
-                                'Authorization': `Bearer ${token}`
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            allActivities = data;
-                            successfulFetch = true;
-                            console.log(`Pobrano ${data.length} aktywności przez alternatywne proxy`);
-                        } else {
-                            console.log(`Błąd alternatywnego proxy: ${response.status} ${response.statusText}`);
-                        }
-                    } catch (error) {
-                        console.log("Błąd podczas używania alternatywnego proxy:", error);
-                    }
-                }
-                
-                // Jeśli wszystkie metody zawiodły, użyj danych demonstracyjnych
-                if (!successfulFetch) {
-                    console.warn("Wszystkie metody pobierania danych zawiodły. Używanie danych demonstracyjnych.");
-                    return generateTestActivities(30); // Więcej aktywności w trybie awaryjnym
-                }
-                
-                console.log(`Łącznie pobrano ${allActivities.length} aktywności z API Strava`);
+                const activities = await response.json();
+                console.log(`Pobrano ${activities.length} aktywności z API Strava`);
                 
                 // Przetwórz odpowiedź na format używany w aplikacji
-                return allActivities.map(a => ({
+                return activities.map(a => ({
                     id: a.id.toString(),
                     name: a.name,
                     type: a.type,
@@ -2230,56 +2083,60 @@
                 
             } catch (error) {
                 console.error('Błąd podczas pobierania aktywności z API Strava:', error);
-                console.log('Użycie danych demonstracyjnych z powodu błędu');
+                alert(`Wystąpił błąd podczas pobierania aktywności: ${error.message}`);
                 
-                return generateTestActivities(25);
+                // Dla prawdziwych użytkowników NIE generujemy testowych danych w przypadku błędu
+                return [];
             }
         }
         
-        // Generowanie testowych aktywności
-        function generateTestActivities(count = 15) {
-            console.log(`Generowanie ${count} przykładowych aktywności...`);
+        // Generowanie testowych aktywności (używane tylko do podglądu, nie do zapisu)
+        function generateTestActivities() {
+            console.log('Generowanie przykładowych aktywności...');
             const testActivities = [];
-            const types = ['Run', 'Ride'];
+            
+            // Typy aktywności
+            const types = ['Run', 'Ride', 'TrailRun', 'VirtualRide'];
+            
             const names = [
-                'Poranny bieg', 'Popołudniowa jazda', 'Wieczorny bieg', 
-                'Długi weekend', 'Regeneracja', 'Bieg w terenie',
-                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowa jazda',
-                'Przygotowanie do zawodów', 'Bieg w parku', 'Przełaje',
-                'Wycieczka rowerowa', 'Commute', 'Trening w górach'
+                'Poranny trening', 'Popołudniowa sesja', 'Wieczorny wypad', 
+                'Długi weekend', 'Regeneracja', 'Trening w terenie',
+                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowy trening'
             ];
             
-            const now = new Date();
-            const oneYearAgo = new Date(now);
-            oneYearAgo.setFullYear(now.getFullYear() - 1);
+            // Generuj 5-10 aktywności
+            const count = Math.floor(Math.random() * 5) + 5;
             
-            // Utwórz lepiej rozmieszczone aktywności
+            // Oblicz różnicę dni między początkiem a końcem wyzwania
+            const startDate = challengeParams.startDate;
+            const endDate = new Date(); // Teraz
+            const dateDiffDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+            
             for (let i = 0; i < count; i++) {
                 const type = types[Math.floor(Math.random() * types.length)];
-                const nameIndex = Math.floor(Math.random() * names.length);
-                const name = names[nameIndex];
+                const name = names[Math.floor(Math.random() * names.length)];
                 
                 // Dystans zależny od typu aktywności
                 let distance;
-                if (type === 'Run') {
-                    distance = (Math.random() * 15 + 3) * 1000; // 3-18km dla biegania
+                if (type.includes('Run')) {
+                    distance = (Math.random() * 10 + 3) * 1000; // 3-13km dla biegania
                 } else {
-                    distance = (Math.random() * 40 + 10) * 1000; // 10-50km dla jazdy rowerem
+                    distance = (Math.random() * 30 + 10) * 1000; // 10-40km dla jazdy na rowerze
                 }
                 
-                const movingTime = distance * (Math.random() * 30 + 240); // 4-7 min/km tempo
-                const averageSpeed = type === 'Run' ? distance / movingTime * 3600 : distance / movingTime * 3600 * 2; // km/h
+                const movingTime = distance * (Math.random() * 30 + 240); // 4-8 min/km tempo
+                const averageSpeed = type.includes('Run') ? 
+                    distance / movingTime * 3600 : // km/h dla biegania
+                    distance / movingTime * 3600 * 2; // km/h dla roweru (szybciej)
                 
-                // Równomiernie rozłożone aktywności w ciągu roku
-                const dayOffset = Math.floor(i * (365 / count));
-                const activityDate = new Date(oneYearAgo);
-                activityDate.setDate(activityDate.getDate() + dayOffset);
-                
-                // Dodaj losowość do godziny
-                activityDate.setHours(Math.floor(Math.random() * 12) + 6); // między 6:00 a 18:00
+                // Losowa data w okresie wyzwania
+                const randomDayOffset = Math.floor(Math.random() * dateDiffDays);
+                const activityDate = new Date(startDate);
+                activityDate.setDate(activityDate.getDate() + randomDayOffset);
+                activityDate.setHours(Math.floor(Math.random() * 14) + 6); // między 6:00 a 20:00
                 
                 testActivities.push({
-                    id: 'activity_' + Math.floor(Math.random() * 1000000),
+                    id: 'test_activity_' + Math.floor(Math.random() * 1000000),
                     name: name,
                     type: type,
                     distance: distance,
@@ -2289,10 +2146,10 @@
                 });
             }
             
-            // Posortuj aktywności od najnowszej do najstarszej
-            testActivities.sort((a, b) => b.startDate - a.startDate);
+            // Posortuj aktywności według daty (od najstarszej)
+            testActivities.sort((a, b) => a.startDate - b.startDate);
             
-            console.log('Wygenerowano testowe aktywności:', testActivities);
+            console.log('Wygenerowano przykładowe aktywności:', testActivities);
             return testActivities;
         }
         
@@ -2300,92 +2157,50 @@
         async function addActivities(athleteId, stravaActivities, role) {
             try {
                 console.log(`Dodawanie aktywności dla uczestnika ${athleteId} z rolą ${role}...`);
-                console.log('Aktywności do dodania:', stravaActivities);
+                console.log('Liczba aktywności przed filtrowaniem:', stravaActivities.length);
                 
-                // Bezwzględnie weryfikujemy parametry wyzwania
-                const paramsDoc = await db.collection('challengeParams').doc('main').get();
-                if (!paramsDoc.exists) {
-                    console.error('BŁĄD: Brak parametrów wyzwania w Firebase!');
-                    alert('Błąd: Brak parametrów wyzwania w Firebase. Skontaktuj się z administratorem.');
-                    return false;
-                }
+                // Sprawdź, czy to testowy użytkownik
+                const isTestUser = athleteId.toString().startsWith('test_');
                 
-                // Pobierz daty wyzwania
-                const params = paramsDoc.data();
-                const startDate = params.startDate.toDate();
-                const endDate = params.endDate.toDate();
-                
-                // Zaktualizuj globalne parametry
-                challengeParams = {
-                    startDate: startDate,
-                    endDate: endDate,
-                    pointGoal: params.pointGoal
-                };
-                
-                console.log(`WAŻNE: Dodawanie aktywności TYLKO z okresu wyzwania: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`);
-                
-                // Sprawdź, czy to użytkownik testowy
-                const isTestUser = athleteId && (
-                    athleteId.startsWith('test_') ||
-                    athleteId.startsWith('user_') ||
-                    athleteId.startsWith('demo_')
-                );
-                
-                // Najpierw pobierz istniejące aktywności dla tego uczestnika
-                const existingActivitiesSnapshot = await db.collection('activities')
-                    .where('athleteId', '==', athleteId)
-                    .get();
-                
-                const existingActivityIds = new Set();
-                existingActivitiesSnapshot.forEach(doc => {
-                    existingActivityIds.add(doc.id);
-                });
-                
-                console.log(`Znaleziono ${existingActivityIds.size} istniejących aktywności w bazie danych.`);
-                
-                // PONOWNA WERYFIKACJA: sprawdzamy daty każdej aktywności, aby upewnić się,
-                // że są w zakresie dat wyzwania, NAWET JEŚLI już były filtrowane wcześniej
+                // Filtruj aktywności na podstawie dat wyzwania i roli
                 const eligibleActivities = stravaActivities.filter(activity => {
                     const activityDate = new Date(activity.startDate);
-                    const isInDateRange = activityDate >= startDate && activityDate <= endDate;
-                    const isEligibleType = isActivityEligible(activity, role);
-                    const isNewActivity = !existingActivityIds.has(activity.id);
                     
-                    // Szczegółowe logowanie dla każdej aktywności
+                    // Sprawdź czy aktywność jest w okresie wyzwania
+                    const isInDateRange = activityDate >= challengeParams.startDate && 
+                                         activityDate <= challengeParams.endDate;
+                    
+                    // Sprawdź czy aktywność jest odpowiedniego typu dla roli uczestnika
+                    const isEligibleType = isActivityEligible(activity, role);
+                    
+                    // Logowanie dla debugowania
                     if (!isInDateRange) {
-                        console.warn(`UWAGA: Aktywność ${activity.id} (${activity.name}, ${activityDate.toLocaleDateString()}) odrzucona - poza zakresem wyzwania: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`);
+                        console.log(`Aktywność ${activity.id} odrzucona - poza zakresem dat: ${activityDate}`);
                     }
                     if (!isEligibleType) {
-                        console.log(`Aktywność ${activity.id} (${activity.name}, ${activity.type}) odrzucona - nieodpowiedni typ dla roli ${role}`);
-                    }
-                    if (!isNewActivity) {
-                        console.log(`Aktywność ${activity.id} (${activity.name}) już istnieje w bazie danych`);
+                        console.log(`Aktywność ${activity.id} odrzucona - nieodpowiedni typ: ${activity.type} dla roli ${role}`);
                     }
                     
-                    // Wszystkie warunki muszą być spełnione!
-                    return isInDateRange && isEligibleType && isNewActivity;
+                    return isInDateRange && isEligibleType;
                 });
                 
-                console.log(`Znaleziono ${eligibleActivities.length} nowych aktywności kwalifikujących się do wyzwania.`);
+                console.log(`Znaleziono ${eligibleActivities.length} aktywności kwalifikujących się do wyzwania.`);
                 
                 if (eligibleActivities.length === 0) {
-                    if (isTestUser) {
-                        // Dla użytkowników testowych generujemy więcej aktywności jeśli nie ma żadnych
-                        alert('Wygenerowano testowe aktywności dla użytkownika demonstracyjnego.');
-                        return true; // Udajemy że dodaliśmy aktywności
+                    if (!isTestUser) {
+                        alert('Nie znaleziono aktywności kwalifikujących się do wyzwania. Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania.');
                     } else {
-                        // Dla prawdziwych użytkowników wyświetlamy komunikat
-                        alert('Nie znaleziono nowych aktywności kwalifikujących się do wyzwania. ' +
-                              'Upewnij się, że masz aktywności odpowiedniego typu w okresie trwania wyzwania: ' + 
-                              startDate.toLocaleDateString() + ' - ' + endDate.toLocaleDateString());
-                        return false;
+                        alert('Wygenerowano testowe aktywności dla testowego użytkownika.');
+                        // Dla testowych użytkowników dodajemy losowe testowe aktywności
+                        return await addTestActivitiesForTestUser(athleteId, role);
                     }
+                    return;
                 }
                 
                 let totalPoints = 0;
                 let totalDistance = 0;
                 
-                // Add each activity to Firebase
+                // Dodaj każdą aktywność do Firebase
                 const batch = db.batch();
                 
                 for (const activity of eligibleActivities) {
@@ -2393,9 +2208,9 @@
                     totalPoints += points;
                     totalDistance += activity.distance / 1000;
                     
-                    const activityRef = db.collection('activities').doc(activity.id);
+                    const activityRef = db.collection('activities').doc(activity.id.toString());
                     batch.set(activityRef, {
-                        athleteId: athleteId,
+                        athleteId: athleteId.toString(),
                         name: activity.name,
                         type: activity.type,
                         startDate: firebase.firestore.Timestamp.fromDate(new Date(activity.startDate)),
@@ -2406,34 +2221,161 @@
                     });
                 }
                 
-                // Update participant totals
-                const participantRef = db.collection('participants').doc(athleteId);
+                // Aktualizuj łączną liczbę punktów uczestnika
+                const participantRef = db.collection('participants').doc(athleteId.toString());
                 batch.update(participantRef, {
                     totalPoints: firebase.firestore.FieldValue.increment(totalPoints),
                     totalDistance: firebase.firestore.FieldValue.increment(totalDistance)
                 });
                 
-                // Commit all changes in a single batch
+                // Zatwierdź wszystkie zmiany w jednej transakcji
                 await batch.commit();
                 console.log(`Pomyślnie dodano ${eligibleActivities.length} aktywności!`);
                 
-                // Update logs
+                // Dodaj wpis do logów
                 await db.collection('logs').add({
                     type: 'sync',
-                    athleteId: athleteId,
+                    athleteId: athleteId.toString(),
                     activitiesCount: eligibleActivities.length,
                     pointsAdded: totalPoints,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 
                 alert(`Pomyślnie dodano ${eligibleActivities.length} aktywności i ${totalPoints} punktów!`);
-                return true;
                 
             } catch (error) {
                 console.error('Błąd podczas dodawania aktywności:', error);
                 alert(`Wystąpił błąd podczas dodawania aktywności: ${error.message}`);
+            }
+        }
+        
+        // Dodaj testowe aktywności dla testowego użytkownika
+        async function addTestActivitiesForTestUser(athleteId, role) {
+            try {
+                // Generuj testowe aktywności w okresie wyzwania
+                const testActivities = generateTestActivitiesInChallengeRange(role);
+                console.log(`Wygenerowano ${testActivities.length} testowych aktywności dla użytkownika testowego`);
+                
+                let totalPoints = 0;
+                let totalDistance = 0;
+                
+                // Dodaj każdą aktywność do Firebase
+                const batch = db.batch();
+                
+                for (const activity of testActivities) {
+                    const points = calculatePoints(activity, role);
+                    totalPoints += points;
+                    totalDistance += activity.distance / 1000;
+                    
+                    const activityRef = db.collection('activities').doc(activity.id.toString());
+                    batch.set(activityRef, {
+                        athleteId: athleteId.toString(),
+                        name: activity.name,
+                        type: activity.type,
+                        startDate: firebase.firestore.Timestamp.fromDate(new Date(activity.startDate)),
+                        distance: activity.distance,
+                        movingTime: activity.movingTime,
+                        averageSpeed: activity.averageSpeed,
+                        points: points
+                    });
+                }
+                
+                // Aktualizuj łączną liczbę punktów uczestnika
+                const participantRef = db.collection('participants').doc(athleteId.toString());
+                batch.update(participantRef, {
+                    totalPoints: firebase.firestore.FieldValue.increment(totalPoints),
+                    totalDistance: firebase.firestore.FieldValue.increment(totalDistance)
+                });
+                
+                // Zatwierdź wszystkie zmiany w jednej transakcji
+                await batch.commit();
+                console.log(`Pomyślnie dodano ${testActivities.length} testowych aktywności!`);
+                
+                // Dodaj wpis do logów
+                await db.collection('logs').add({
+                    type: 'sync',
+                    athleteId: athleteId.toString(),
+                    activitiesCount: testActivities.length,
+                    pointsAdded: totalPoints,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Błąd podczas dodawania testowych aktywności:', error);
                 return false;
             }
+        }
+        
+        // Generuj testowe aktywności tylko w zakresie dat wyzwania
+        function generateTestActivitiesInChallengeRange(role) {
+            console.log('Generowanie testowych aktywności w zakresie wyzwania...');
+            const testActivities = [];
+            
+            // Typy aktywności w zależności od roli
+            let types;
+            if (role === 'runner') {
+                types = ['Run', 'TrailRun', 'Treadmill'];
+            } else if (role === 'cyclist') {
+                types = ['Ride', 'VirtualRide', 'MountainBikeRide'];
+            } else {
+                types = ['Run', 'TrailRun', 'Ride', 'VirtualRide'];
+            }
+            
+            const names = [
+                'Poranny trening', 'Popołudniowa sesja', 'Wieczorny wypad', 
+                'Długi weekend', 'Regeneracja', 'Trening w terenie',
+                'Dojazd do pracy', 'Trening tempowy', 'Interwały', 'Grupowy trening'
+            ];
+            
+            // Generuj 10-20 aktywności
+            const count = Math.floor(Math.random() * 10) + 10;
+            
+            // Oblicz różnicę dni między początkiem a końcem wyzwania
+            const startDate = challengeParams.startDate;
+            const endDate = challengeParams.endDate;
+            const dateDiffDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+            
+            for (let i = 0; i < count; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                const name = names[Math.floor(Math.random() * names.length)];
+                
+                // Dystans zależny od typu aktywności
+                let distance;
+                if (type.includes('Run')) {
+                    distance = (Math.random() * 10 + 3) * 1000; // 3-13km dla biegania
+                } else {
+                    distance = (Math.random() * 30 + 10) * 1000; // 10-40km dla jazdy na rowerze
+                }
+                
+                const movingTime = distance * (Math.random() * 30 + 240); // 4-8 min/km tempo
+                const averageSpeed = type.includes('Run') ? 
+                    distance / movingTime * 3600 : // km/h dla biegania
+                    distance / movingTime * 3600 * 2; // km/h dla roweru (szybciej)
+                
+                // Losowa data w okresie wyzwania
+                const randomDayOffset = Math.floor(Math.random() * dateDiffDays);
+                const activityDate = new Date(startDate);
+                activityDate.setDate(activityDate.getDate() + randomDayOffset);
+                activityDate.setHours(Math.floor(Math.random() * 14) + 6); // między 6:00 a 20:00
+                
+                testActivities.push({
+                    id: 'test_activity_' + Math.floor(Math.random() * 1000000),
+                    name: name,
+                    type: type,
+                    distance: distance,
+                    movingTime: movingTime,
+                    averageSpeed: averageSpeed,
+                    startDate: activityDate
+                });
+            }
+            
+            // Posortuj aktywności według daty (od najstarszej)
+            testActivities.sort((a, b) => a.startDate - b.startDate);
+            
+            console.log('Wygenerowano testowe aktywności w okresie wyzwania:', testActivities);
+            return testActivities;
         }
         
         // Create confetti animation
